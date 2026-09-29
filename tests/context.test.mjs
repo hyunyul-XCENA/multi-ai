@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import {
   buildManifest,
   bundleDigest,
+  cliProvenance,
   ContextError,
   normalizeText,
   packContext,
@@ -23,6 +24,7 @@ import {
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cliPath = path.join(repoRoot, 'multi-ai-cli.mjs');
+const contextModulePath = path.join(repoRoot, 'lib', 'context.mjs');
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'multi-ai-context-test-'));
 after(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
@@ -91,8 +93,8 @@ function pack(overrides = {}) {
   });
 }
 
-function cli(args, options = {}) {
-  const result = spawnSync(process.execPath, [cliPath, ...args], {
+function cli(args, { script = cliPath, ...options } = {}) {
+  const result = spawnSync(process.execPath, [script, ...args], {
     encoding: 'utf8',
     env: { ...process.env, MULTI_AI_CONFIG_HOME: path.join(scratch, 'config-home') },
     ...options,
@@ -122,6 +124,24 @@ function trySymlink(target, linkPath, type) {
     if (['EPERM', 'EACCES', 'ENOTSUP'].includes(error.code)) return false;
     throw error;
   }
+}
+
+// Replaces one fs function while run() executes. lib/context.mjs looks fs
+// functions up at call time, so this injects faults deterministically.
+function withFs(name, makeReplacement, run) {
+  const original = fs[name];
+  fs[name] = makeReplacement(original);
+  try {
+    return run();
+  } finally {
+    fs[name] = original;
+  }
+}
+
+function failWith(code) {
+  return () => {
+    throw Object.assign(new Error(`simulated ${code}`), { code });
+  };
 }
 
 function listAll(dir) {
@@ -192,13 +212,46 @@ describe('manifest', () => {
     assert.match(one.provenance.note, /does not prove/);
   });
 
-  test('CLI records its own version and hash as provenance', () => {
+  test('CLI records wrapper and context module hashes as provenance', () => {
     const result = cli(['context', 'manifest', '--root', fixture(), '--json']);
     assert.equal(result.status, 0, result.stderr);
     const json = JSON.parse(result.stdout);
     assert.equal(json.provenance.cli_sha256, sha256(fs.readFileSync(cliPath)));
+    assert.equal(json.provenance.cli_path, posix(fs.realpathSync(cliPath)));
+    assert.equal(json.provenance.context_module_sha256, sha256(fs.readFileSync(contextModulePath)));
+    assert.equal(json.provenance.context_module_path, posix(fs.realpathSync(contextModulePath)));
+    assert.notEqual(json.provenance.context_module_sha256, json.provenance.cli_sha256);
     assert.match(json.provenance.cli_version, /^\d+\.\d+\.\d+$/);
     assert.equal(json.drift, false);
+
+    const library = cliProvenance(undefined, undefined);
+    assert.equal(library.cli_sha256, null);
+    assert.equal(library.context_module_sha256, sha256(fs.readFileSync(contextModulePath)));
+  });
+
+  test('a change confined to lib/context.mjs changes only the module hash', (t) => {
+    // Runs the CLI from a copy whose module differs by one comment: the wrapper
+    // hash and the policy digest stay, the module hash follows the module bytes.
+    const copy = tempDir('cli-copy');
+    for (const name of ['multi-ai-cli.mjs', 'policy.yaml', 'package.json']) {
+      fs.copyFileSync(path.join(repoRoot, name), path.join(copy, name));
+    }
+    fs.mkdirSync(path.join(copy, 'lib'));
+    const copiedModule = path.join(copy, 'lib', 'context.mjs');
+    fs.writeFileSync(copiedModule, Buffer.concat([fs.readFileSync(contextModulePath), Buffer.from('// provenance probe\n')]));
+    if (!trySymlink(path.join(repoRoot, 'node_modules'), path.join(copy, 'node_modules'), 'junction')) {
+      return t.skip('symlinks unavailable');
+    }
+    const root = fixture();
+    const original = JSON.parse(cli(['context', 'manifest', '--root', root, '--json']).stdout);
+    const result = cli(['context', 'manifest', '--root', root, '--json'], { script: path.join(copy, 'multi-ai-cli.mjs') });
+    assert.equal(result.status, 0, result.stderr);
+    const changed = JSON.parse(result.stdout);
+    assert.equal(changed.provenance.cli_sha256, original.provenance.cli_sha256);
+    assert.equal(changed.provenance.context_module_sha256, sha256(fs.readFileSync(copiedModule)));
+    assert.notEqual(changed.provenance.context_module_sha256, original.provenance.context_module_sha256);
+    assert.equal(changed.provenance.context_module_path, posix(fs.realpathSync(copiedModule)));
+    assert.equal(changed.digest, original.digest, 'policy digest ignores implementation identity');
   });
 
   test('missing required files and directories fail', () => {
@@ -598,6 +651,39 @@ describe('pack', () => {
     assert.throws(() => pack({ root, reportPath: path.join(alias, 'r.json') }), /--report-path must be outside the policy root/);
   });
 
+  test('children whose names start with two dots are inside, not parents', (t) => {
+    const root = fixture();
+    const out = path.join(root, '..artifacts');
+    const result = cli([
+      'context', 'pack', '--root', root, '--out', out, '--role', 'reviewer',
+      '--task-file', taskFile(), '--report-path', reportPath(), '--json',
+    ]);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /--out must be outside the policy root/);
+    assert.equal(result.stdout, '');
+    assert.ok(!fs.existsSync(out), 'nothing created inside the root');
+    assert.throws(() => pack({ root, out: path.join(out, 'deeper') }), /--out must be outside the policy root/);
+
+    assert.throws(() => pack({ root, reportPath: path.join(root, '..reports', 'r.json') }), /--report-path must be outside the policy root/);
+    const packOut = tempDir('out');
+    const first = pack({ root, out: packOut });
+    assert.throws(
+      () => pack({ root, out: packOut, reportPath: path.join(first.snapshot_dir, '..reports', 'r.json') }),
+      /--report-path must be outside the frozen snapshot/,
+    );
+
+    // A real parent segment is still outside.
+    const sibling = path.join(root, '..', `${path.basename(root)}-sibling-out`);
+    assert.equal(pack({ root, out: sibling }).snapshot_created, true);
+
+    const internal = path.join(root, '..internal');
+    fs.mkdirSync(internal);
+    fs.writeFileSync(path.join(internal, 'inside.md'), '# contained\n');
+    if (!trySymlink(internal, path.join(root, 'references', 'inside-link'), 'junction')) return t.skip('symlinks unavailable');
+    const manifest = buildManifest(root);
+    assert.ok(manifest.files.some((file) => file.path === 'references/inside-link/inside.md'), 'contained link to ..internal is allowed');
+  });
+
   test('bad report paths fail', () => {
     assert.throws(() => pack({ reportPath: 'relative/report.json' }), /--report-path must be absolute/);
     assert.throws(() => pack({ reportPath: path.join(scratch, 'a\nb.json') }), /control characters/);
@@ -643,6 +729,87 @@ describe('pack', () => {
     assert.equal(digests.size, 2);
     assert.equal(fs.readdirSync(out).filter((name) => name.startsWith('policy-')).length, 2);
     assert.ok(!fs.readdirSync(out).some((name) => name.startsWith('.')));
+  });
+});
+
+describe('packet publication', () => {
+  const packetNames = (dir) => fs.readdirSync(dir).filter((name) => /^\.?packet-/.test(name)).sort();
+
+  for (const code of ['ENOTSUP', 'EPERM', 'ENOSYS', 'EXDEV']) {
+    test(`without hard links (${code}) pack fails closed and writes no packet`, () => {
+      const root = fixture();
+      const out = tempDir('out');
+      const task = taskFile();
+      const report = reportPath();
+      const foreign = path.join(out, '.packet-foreign.tmp-1-abc');
+      fs.writeFileSync(foreign, 'another writer');
+      const touched = [];
+      const recordWrites = (original) => function recorded(file, ...rest) {
+        touched.push(path.basename(String(file)));
+        return original.call(this, file, ...rest);
+      };
+      withFs('writeFileSync', recordWrites, () => withFs('openSync', recordWrites, () => withFs('linkSync', () => failWith(code), () => {
+        assert.throws(
+          () => pack({ root, out, taskFile: task, reportPath: report }),
+          (error) => error instanceof ContextError
+            && error.message.includes(`refused a hard link (${code})`)
+            && error.message.includes('No packet was written'),
+        );
+      })));
+      assert.ok(touched.some((name) => name.startsWith('.packet-')), 'staging was written');
+      assert.ok(!touched.some((name) => name.startsWith('packet-')), 'final packet name is never written directly');
+      assert.deepEqual(packetNames(out), [path.basename(foreign)], 'only our own staging file is removed');
+      assert.equal(fs.readFileSync(foreign, 'utf8'), 'another writer');
+
+      // Nothing is left behind that would block a pack on storage with hard links.
+      const retry = pack({ root, out, taskFile: task, reportPath: report });
+      assert.equal(retry.packet_created, true);
+      assert.equal(retry.snapshot_created, false);
+      assert.equal(sha256(fs.readFileSync(retry.packet_path)), retry.packet_sha256);
+    });
+  }
+
+  test('without hard links an identical packet is reused and a different one refused', () => {
+    const root = fixture();
+    const out = tempDir('out');
+    const task = taskFile();
+    const report = reportPath();
+    const again = () => withFs('linkSync', () => failWith('EPERM'), () => pack({ root, out, taskFile: task, reportPath: report }));
+    const first = pack({ root, out, taskFile: task, reportPath: report });
+    const reused = again();
+    assert.equal(reused.packet_created, false);
+    assert.equal(reused.packet_path, first.packet_path);
+
+    fs.appendFileSync(first.packet_path, 'tampered\n');
+    const tampered = fs.readFileSync(first.packet_path);
+    assert.throws(again, /Existing packet does not match its content address/);
+    assert.ok(fs.readFileSync(first.packet_path).equals(tampered));
+    assert.deepEqual(packetNames(out), [path.basename(first.packet_path)]);
+  });
+
+  test('a pack that loses the publish race verifies the winner', () => {
+    // A second pack runs between the first pack's staging write and its link, so
+    // the first link meets EEXIST and must verify the winner instead of replacing it.
+    const root = fixture();
+    const out = tempDir('out');
+    const task = taskFile();
+    const report = reportPath();
+    let inner;
+    const outer = withFs('linkSync', (original) => {
+      let raced = false;
+      return function racing(...args) {
+        if (!raced) {
+          raced = true;
+          inner = pack({ root, out, taskFile: task, reportPath: report });
+        }
+        return original.apply(this, args);
+      };
+    }, () => pack({ root, out, taskFile: task, reportPath: report }));
+    assert.equal(inner.packet_created, true);
+    assert.equal(outer.packet_created, false);
+    assert.equal(outer.packet_path, inner.packet_path);
+    assert.deepEqual(packetNames(out), [path.basename(inner.packet_path)]);
+    assert.equal(sha256(fs.readFileSync(outer.packet_path)), outer.packet_sha256);
   });
 });
 
