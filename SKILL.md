@@ -19,6 +19,8 @@ this core, their assigned role and Task packet; do not load lead routing policy.
 A confirmed user-facing session owns the task as Lead. Tiny or mechanical work
 needs only direct checks. For meaningful changes obtain independent review;
 when coordinating, reviewing or integrating, read [Lead workflow](references/lead-workflow.md).
+Before the final response, the Lead closes finished task-owned workers and removes
+disposable workspaces after preserving results; follow the workflow's cleanup checks.
 Lost role/identity after resume is not permission to become Lead or start a team.
 Use [recovery](prompts/recover.md) when context is missing, not on every message.
 

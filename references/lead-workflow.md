@@ -190,3 +190,41 @@ commit requires renewed review and checks. Verify the actual integrated HEAD.
 Keep the decision report beside the worker reports and reference its path in the
 Run. Schemas validate structure; identity, evidence truth and snapshot equality
 remain Lead checks.
+
+## Completion and cleanup
+
+Cleanup is part of completing the task, including failed or replaced worker attempts.
+The Lead uses native Orca commands; do not build a cleanup daemon or lifecycle wrapper.
+Track the exact worker handles, execution hosts and temporary worktree paths created
+for the task in the existing Run/checkpoint. Keep reports and required evidence outside
+disposable worktrees. Release finished workers when no follow-up is needed; finish the
+audit below before the final response, rather than waiting for the user to notice clutter.
+
+1. Settle completion and acknowledge deliveries using the installed orchestration
+   guide. Inspect all task-owned resources, including `retained` and replaced attempts,
+   against current terminal state. `reclaimable=0`, a succeeded Dispatch, or an idle
+   screen alone does not prove cleanup. A `user_takeover` label needs inspection of
+   current ownership/activity; preserve a real later human task or new Dispatch.
+2. Close finished task-owned terminals and verify the execution host confirms exit.
+   In a shared workspace, close only identified worker panes/tabs. Preserve the Lead,
+   unrelated sessions and work the user asked to retain. Use workspace-wide
+   `terminal close --worktree <exact-selector> --all` only for an exclusively disposable
+   workspace with no remaining work; this also retires tabs, layouts and resume records.
+3. Audit every temporary worktree separately: an exited terminal does not remove its
+   sidebar workspace. Verify the resolved absolute path, clean tracked and untracked
+   state, and that results are integrated or explicitly discarded by the task decision.
+   For cherry-picked work, verify patch equivalence rather than relying only on ancestry.
+   Preserve required reports, logs and commits before removal. Remove eligible worktrees
+   through `orca worktree rm --worktree <exact-selector> --json` without `--force`.
+   Do not delete the Lead checkout, user-owned workspaces, or unpreserved changes.
+4. Re-list terminals with `--include-visual-layouts` and list the repo's worktrees on
+   the owning host. Verify removed handles, layouts and child-workspace entries are
+   absent. A retained Git branch is distinct from a remaining Orca workspace. Native
+   resource history may remain after exit; do not erase history to make counts match.
+
+Record cleanup receipts and any retained resource with its reason and next action
+beside the existing task evidence. If cleanup fails or the host is unreachable, report
+the remaining resource explicitly; do not claim completion from an empty partial list.
+Distinguish verified process exit, persisted tab/layout removal and workspace removal
+from what was actually observed on screen. Do not diagnose a UI refresh bug until
+checking whether the visible item is a workspace rather than a terminal tab.
