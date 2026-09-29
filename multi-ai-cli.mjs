@@ -7,6 +7,7 @@ import readline from 'node:readline';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parse, stringify } from 'yaml';
+import { CONTEXT_USAGE, contextCommand } from './lib/context.mjs';
 
 const VERSION = '0.7.3';
 const AGENTS = ['codex', 'claude'];
@@ -104,10 +105,11 @@ function usage() {
                                        Allow installed Orca orchestration commands
   multi-ai-cli codex-rules show        Show the managed Codex rule
   multi-ai-cli codex-rules remove      Remove the managed Codex rule
+${CONTEXT_USAGE}
 
 Examples:
   multi-ai-cli set lead.primary.effort xhigh
-  multi-ai-cli set roles.engineer.primary.model claude-opus-5
+  multi-ai-cli set roles.engineer.primary.model claude-opus-5-5
   multi-ai-cli get roles.reviewer.by_maker_family.anthropic.primary.model
   multi-ai-cli unset lead.primary.effort      One value back to its default
   multi-ai-cli unset lead.primary             One whole route back to its default
@@ -984,6 +986,9 @@ async function main() {
   if (args.length === 2 && args[0] === 'codex-rules' && args[1] === 'show') return showCodexRules();
   if (args.length === 2 && args[0] === 'codex-rules' && args[1] === 'remove') return removeCodexRules();
   if (args.length >= 2 && args[0] === 'route') return showRoute(args.slice(1));
+  if (args.length >= 1 && args[0] === 'context') {
+    return contextCommand(args.slice(1), { cliPath: fileURLToPath(import.meta.url), version: VERSION });
+  }
   if (args.length === 1 && args[0] === 'diff') return showDiff();
   if (args.length === 1 && args[0] === 'defaults') return showDefaults();
   if (args.length === 2 && args[0] === 'defaults') return showDefaults(args[1]);

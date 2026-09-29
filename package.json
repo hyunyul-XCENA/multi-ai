@@ -7,6 +7,9 @@
   "bin": {
     "multi-ai-cli": "multi-ai-cli.mjs"
   },
+  "scripts": {
+    "test": "node --test tests/context.test.mjs"
+  },
   "engines": {
     "node": ">=18"
   },
