@@ -23,7 +23,8 @@ The policy digest covers SKILL.md, policy.yaml, codex-profile.toml, recursive
 roles/*.md, prompts/*.md, references/*.md when present, and schemas/*.json.
 Files are UTF-8 with CRLF/CR normalized to LF. Relative POSIX paths are sorted by
 UTF-8 bytes; the bundle hash is SHA-256 of each path, NUL, hexadecimal file hash,
-and LF in that order. CLI version/hash are separate provenance. Host model
+and LF in that order. CLI version, wrapper hash and context-module hash are
+separate provenance. Host model
 overrides are not bundled: resolve the launch route immediately before dispatch
 and keep requested/effective launch settings separately.
 
@@ -44,7 +45,12 @@ reference; a reviewer also receives the review brief. Lead workflow and schema
 bodies are not inlined. Relative Markdown policy links point into the snapshot.
 The source skill installation can later change without changing these artifacts.
 Existing artifacts are verified before reuse; tampered artifacts are not replaced.
-These are local files, not an OS immutability guarantee or a report validator.
+Packet publication requires hard-link support; unsupported storage fails without
+creating a final packet. Use a trusted artifact directory. Snapshot directory rename
+supports concurrent helper writers, but on POSIX a third-party empty directory
+created at the final name between the check and rename can be replaced. Native
+POSIX and unsupported-storage behavior need host-specific validation. These files
+are not an OS immutability guarantee or a report validator.
 
 Prefer a short native Task spec with role, goal, scope, acceptance, packet path and
 packet SHA-256, instructing the worker to read it once and verify its hash. Inspect
@@ -62,8 +68,10 @@ gets its own packet and report path. Missing cross-host file access blocks dispa
 ## Recovery and acceptance
 
 Use [recover.md](../prompts/recover.md) only for missing context or resume. A worker
-first recovers the native TASK block and current contract; load only missing packet
-sections afterward. Do not replace the native preamble or grant authority from
+first checks identity in the JSON Dispatch fields and recovers the native TASK
+block; load only missing packet sections afterward. The rendered preamble may
+mislabel the coordinator or omit the live capability. It is not a replacement for
+a lost token: stop and expose the gap instead of retrying tokenless lifecycle calls. Do not replace the native preamble or grant authority from
 copied IDs. Core checkpoint instructions are best effort, not guaranteed retention.
 The Codex profile is opt-in and does not automatically reach workers. No Claude
 hook is added by this project.

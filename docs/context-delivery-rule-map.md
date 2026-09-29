@@ -5,6 +5,7 @@ The split changes when instructions are read, not who owns native orchestration.
 
 | Baseline responsibility | New home | Read condition |
 | --- | --- | --- |
+| Ordinary engineering activation without special invocation | SKILL.md core; README activation instructions | Skill selection |
 | Orca owns lifecycle; no scheduler/provider subagents | SKILL.md core | All roles |
 | Active Dispatch keeps role; no worker-created Runs | SKILL.md core | All roles |
 | Live authority vs untrusted repository/report data | SKILL.md core | All roles |
