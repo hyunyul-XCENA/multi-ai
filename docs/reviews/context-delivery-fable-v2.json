@@ -1,0 +1,103 @@
+{
+  "verdict": "APPROVED",
+  "reviewer_id": "ctx_d1de6a425687",
+  "maker_id": "term_a7d61d2a-f921-476a-9963-05670f66833d",
+  "review_target": null,
+  "verification_performed": [
+    {
+      "command": "diff -u design-v1.md design-v2.md",
+      "cwd": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929",
+      "exit_code": 1,
+      "result": "v2는 v1 본문에 core 규칙 2개(outcome 매핑, report 경로 유일/보존), 복구 문단 교체, manifest 정의, rollout drain, validator 직접 관찰, A1 CLI pack 허용을 추가하고 상세 계약 4개 절(F3/F4/F7, F2, F1/F5, v1 처리표)을 덧붙였다. 삭제된 v1 규칙은 없다."
+    },
+    {
+      "command": "orca orchestration task-list --help; task-create --help; worker-show --help; worker-read --help; worker-list --help; check --help",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": 0,
+      "result": "v2가 인용한 verb/flag가 Orca 1.4.205에 모두 존재: task-list --run/--brief(--brief는 spec을 160자로 자름, v2가 제외한 것이 맞음), worker-show --dispatch, worker-read --dispatch --source transcript --cursor, worker-list --run --terminal-state reclaimable, check --ack. task-create/worker-start의 --spec은 <text>만 받고 파일 입력 옵션은 없다."
+    },
+    {
+      "command": "orca orchestration dispatch-show --task task_00916b62f8ca --preamble --from term_eb7ef6f6-fe0b-4ac4-86d9-c0fb306480e7 --json",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": 0,
+      "result": "새 Dispatch에서도 preamble 재취득 가능. result는 dispatch(assignee_handle, status, run_id, creator_handle, contract_version 등)와 preamble(6307자, TASK 블록 포함)뿐이며 별도 spec 필드는 없다. 즉 worker는 preamble 안의 TASK 텍스트로 명세를 복구하고, run_id는 이 응답에서 얻어야 task-list --run을 부를 수 있다."
+    },
+    {
+      "command": "(not re-run) v1 검사: 전역 설치본 vs repo diff, worktree .agents stale 사본 diff, .skill-lock.json/skills-lock.json, ~/.codex/multi-ai.config.toml 부재, ~/.claude/skills/multi-ai symlink",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": null,
+      "result": "v1 보고서(fable-review-v1.json)의 관찰을 재사용. 이번에 다시 실행하지 않았다."
+    },
+    {
+      "command": "node write-review-v2.js (ad-hoc structural check against schemas/review-result.schema.json)",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": 0,
+      "result": "이 보고서 구조 검사 통과(APPROVED 규칙: blocking finding 없음, verification 1개 이상). 완전한 JSON Schema 검증기(ajv/jsonschema)는 미설치라 실행하지 않음."
+    },
+    {
+      "command": "(not run) A0 baseline 계측, 회귀 시나리오, compact/resume 테스트, 성능 비교",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": null,
+      "result": "설계 리뷰 범위 밖. 실행하지 않았다. 이 APPROVED는 설계 승인이며 구현 검증이 아니다."
+    }
+  ],
+  "findings": [
+    {
+      "id": "V2-F1",
+      "blocking": false,
+      "claim": "F1 해소됨. 단 BLOCKED verdict를 언제 쓰는지가 정의되지 않아 lifecycle outcome이 리뷰어 해석에 달린다.",
+      "location": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/design-v2.md §공통 core와 역할 분리 (\"BLOCKED는 미완료로 보고한다\") vs C:/Users/hyunyul/orca/workspaces/multi-ai/dev/prompts/review.md (\"Note inaccessible inputs or checks that could not be performed\")",
+      "observation": "v2 core는 완료 리뷰=succeeded, 미완료/BLOCKED=failed로 매핑한다. 그런데 현재 review.md는 접근 불가 입력을 residual_risk에 적고 리뷰를 완료하라고 읽힌다. 같은 상황(예: 대상 commit이 checkout에 없음)을 한 리뷰어는 CHANGES_REQUESTED+residual_risk(succeeded)로, 다른 리뷰어는 BLOCKED(failed → Lead의 failed-attempt 복구)로 보고할 수 있다. A1의 review.md에 \"BLOCKED는 review_target/diff/요구사항 중 하나라도 확인할 수 없어 verdict를 낼 수 없을 때만; 일부 check 미실행은 exit_code null + residual_risk로 완료\"를 한 줄로 고정하면 된다. outcome 매핑 fixture 시나리오에 이 경계 케이스를 포함할 것."
+    },
+    {
+      "id": "V2-F2",
+      "blocking": false,
+      "claim": "F2 해소됨. 복구 순서와 용어를 정리하면 실행 가능성이 더 분명해진다.",
+      "location": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/design-v2.md §복구 정책 (\"설치 CLI의 dispatch-show … task-list --run <run_id> --json\")",
+      "observation": "(1) \"설치 CLI\"는 multi-ai-cli로 읽힐 수 있다. dispatch-show는 Orca CLI이므로 \"Orca CLI(preamble의 executable)\"로 쓴다. (2) preamble에는 run_id가 없고 dispatch-show 응답의 dispatch.run_id에만 있다(실측). 따라서 순서는 dispatch-show → run_id 획득 → task-list --run 이어야 하며, 실측상 dispatch-show의 preamble 문자열에 TASK 블록이 그대로 들어 있어 task-list 없이도 명세 복구가 된다. 이를 적어 두면 worker가 불필요한 호출을 줄인다. (3) provider별 표의 \"compact 요약에 최소 identity/packet 참조 보존을 요청\"은 어느 텍스트가 이 요청을 담는지(core 문구) 명시가 필요하다. 모두 A1 문서 수준이며 설계 자체를 막지 않는다."
+    },
+    {
+      "id": "V2-F3",
+      "blocking": false,
+      "claim": "F3 해소됨. manifest 규칙 중 symlink 조항이 이 host의 기본 Claude discovery 경로에서 오류를 낸다.",
+      "location": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/design-v2.md §v2 상세 계약: 정책 snapshot과 전달 항목 2 (\"root 밖 symlink 참조·읽기 실패는 오류\")",
+      "observation": "v1에서 확인한 대로 ~/.claude/skills/multi-ai 자체가 ~/.agents/skills/multi-ai로 가는 symlink다(install이 만든 정상 상태). Lead가 Claude discovery 경로를 root로 고르면 root가 곧 \"root 밖\"을 가리키므로 규칙을 문자 그대로 적용하면 항상 오류다. A1 spec에 \"root는 먼저 realpath로 정규화하고, 그 뒤 항목 단위로 realpath가 정규화된 root 밖이면 오류\"로 적으면 된다. 또 manifest 대상에서 multi-ai-cli.mjs/package.json이 빠져 있는데 route 병합 로직은 CLI에 있으므로 항목 3의 보조 metadata에 CLI 버전(package.json version 또는 파일 hash)을 넣기를 권한다."
+    },
+    {
+      "id": "V2-F4",
+      "blocking": false,
+      "claim": "F4 해소됨. drain 범위가 host 전체임을 명시해야 한다.",
+      "location": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/design-v2.md §변경 파일 계획 (\"Phase A의 rollout은 활성 Run을 drain한 뒤 설치·세션 재시작한다\")",
+      "observation": "전역 설치(~/.agents/skills/multi-ai)는 그 host의 모든 Orca project/worktree가 공유한다. drain은 \"이 Run\"이 아니라 \"이 host의 모든 활성 Run과 Lead 세션\"이어야 하고, 원격 execution host는 각각 따로 drain·install한다. frozen packet + 외부 변경 시 mutation 중단 + coordinator 판단 조합은 v1 F4의 \"모든 in-flight worker 동시 escalation\" 문제를 운영 규칙으로 막으므로 설계 수준에서는 충분하다."
+    },
+    {
+      "id": "V2-F5",
+      "blocking": false,
+      "claim": "F5 해소됨. compact를 재현하는 방법과 retained terminal 처리를 시나리오에 적어야 A2에서 실행 가능하다.",
+      "location": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/design-v2.md §v2 상세 계약: 측정과 회귀 판정 (시나리오 표 1·2행, settlement/cleanup/ack 행)",
+      "observation": "(1) \"별도 worker를 compact/resume\"의 트리거 방법이 없다. terminal worker는 Orca terminal로 /compact 입력이 가능하지만 terminal 없는 worker는 방법이 없으므로 그 케이스는 미검증으로 표기해야 한다. (2) cleanup 행의 \"미결 reclaimable 0\"은 worker-retain으로 의도적으로 남긴 terminal과 충돌한다. \"reclaimable 0 또는 retained로 명시된 것만\"으로 바꾼다. (3) B 정의는 좋다. 단 baseline에서 dispatch.md가 SKILL.md를 경로로 넘기므로 baseline B는 재독 bytes가 대부분이고 candidate B는 inline bytes가 대부분이 된다. 두 분류를 같은 규칙으로 센다고 되어 있으니 문제는 없지만, 결과 표에 inline/재독을 분리해 보여 줘야 \"경로만 줄고 총량은 같다\"를 판별할 수 있다."
+    },
+    {
+      "id": "V2-F9",
+      "blocking": false,
+      "claim": "inline packet의 전달 수단(--spec <text>) 용량·quoting 한계가 미검증이다. A1 첫 실험 항목으로 두고 실패 시 path+digest로 전환하는 fallback을 설계에 적어야 한다.",
+      "location": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/design-v2.md §v2 상세 계약: 정책 snapshot과 전달 항목 5 (\"task spec은 core + 역할 본문 + 역할별 prompt + task 명세를 한 번 inline으로 포함\")",
+      "observation": "task-create/worker-start의 --spec은 텍스트 인자만 받고 파일 입력이 없다(도움말 확인). 현재 이 Dispatch의 preamble이 6.3K자이므로 core+역할+prompt+명세를 inline하면 10K자 안팎이 된다. Windows 프로세스 인자 한계(32K자)는 넘지 않겠지만, PowerShell에서 backtick·$·따옴표가 섞인 다중 행 markdown을 --spec에 넣으면 조용히 변형될 수 있고 Lead(Codex)가 매번 정확히 quoting해야 한다. 설계는 packet.md를 artifact 디렉터리에 저장하고 hash를 기록하므로, inline이 깨지면 \"packet 절대 경로 + digest만 spec에 넣고 worker가 한 번 읽는다\"로 바꿔도 F4 보호(frozen snapshot)와 B 측정(읽은 bytes를 센다)은 유지된다. A1에서 실제 worker-start 한 번으로 inline 보존 여부를 dispatch-show로 확인하고 결과에 따라 고르면 된다. 테스트 task 생성이 필요해 이번 리뷰에서는 실행하지 않았다."
+    },
+    {
+      "id": "V2-F10",
+      "blocking": false,
+      "claim": "Lead 자신의 \"실제 로딩 사실\" 확인은 best-effort임을 명시해야 한다.",
+      "location": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/design-v2.md §v2 상세 계약: 정책 snapshot과 전달 항목 1 (\"provider discovery와 transcript의 실제 파일 read를 함께 확인\")",
+      "observation": "worker는 worker-read transcript로 확인할 수 있지만 Lead는 자기 세션 transcript를 세션 중에 읽을 표준 경로가 없다(v2 자신도 provider transcript 경로를 고정 가정하지 않는다). Lead에 대해서는 \"발견 가능한 multi-ai 경로를 모두 나열하고 2개 이상이면 dispatch 전에 보고\"까지만 요구하고, 실제 read 확인은 A0 계측에서 사후 검증하는 것으로 나누면 규칙이 실행 가능해진다."
+    }
+  ],
+  "residual_risk": [
+    "APPROVED는 설계 v2에 남은 design blocker가 없다는 판단이다. A1 산출물(분리된 core/role/prompt, CLI pack, 축소된 dispatch/recover)과 A2 회귀 결과는 존재하지 않으며 검증하지 않았다. A1 이후 \"기존 SKILL.md 각 규칙의 새 위치 mapping 표\"를 대상으로 한 문장 단위 재리뷰가 필요하다.",
+    "--spec inline 전달의 용량·quoting은 실제 worker-start 없이 확인할 수 없어 미검증이다(V2-F9). 실패해도 설계에 fallback 경로가 있으므로 blocking으로 두지 않았다.",
+    "dispatch-show --preamble 재취득은 local terminal worker 두 Dispatch에서만 확인했다. 원격(--on)·terminal 없는 worker는 여전히 미검증이며 v2도 그렇게 적고 있다.",
+    "v1의 재사용한 관찰(전역 설치본 동일성, stale .agents 사본, lock 파일, profile 부재)은 이번에 다시 실행하지 않았다. v1 이후 host 상태가 바뀌었다면 그 부분은 오래된 관찰이다.",
+    "v2가 v1의 일부 결론(profile 부재=모든 hook 부재, 자동 재시도·report 덮어쓰기·Run 폐기의 필연성)을 한정한 것은 타당하다고 본다. 해당 시나리오는 \"정책이 허용하는 동작\"이 아니라 \"규칙이 없을 때 모델이 저지를 수 있는 동작\"으로 읽어야 하며, v2는 그 규칙을 core에 넣어 대응했다.",
+    "Reviewer(Claude Fable, claude-fable-5-1)와 maker(Codex Lead, coordinator handle)는 다른 family다. same-family fallback 없음."
+  ]
+}

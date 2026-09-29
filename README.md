@@ -35,7 +35,9 @@ flowchart TD
 
 Paths are choices, not worker counts. The Lead creates every Orca worker.
 Architect covers structure and tradeoffs; Researcher gathers evidence and hypotheses.
-SKILL.md defines review and integration requirements, including Lead-authored code.
+The short core applies to everyone. Workers load only their role and Task packet.
+The [Lead workflow](references/lead-workflow.md) defines routing, review and
+integration requirements, including Lead-authored code.
 
 ## Install once per host
 
@@ -128,7 +130,8 @@ the host overrides and prints the flags for one `worker-start`:
 multi-ai-cli route architect
 # --agent claude --model claude-fable-5-1 --effort medium
 
-orca orchestration worker-start $(multi-ai-cli route engineer) --role engineer
+multi-ai-cli route engineer --json
+# Pass agent/model/effort to native worker-start; assign the role in --spec.
 ```
 
 Because it reads the policy from disk on every call, editing the policy mid-session
@@ -209,7 +212,7 @@ multi-ai-cli engineer claude
 
 It swaps the installed Engineer primary/fallback routes so the requested family is
 preferred. Use `engineer default` to restore those routes, or `multi-ai-cli reset`
-to restore the entire installed policy. Commands write only `~/.multi-ai/policy.yaml`;
+to restore the entire installed policy. Routing configuration commands write only `~/.multi-ai/policy.yaml`;
 set
 `MULTI_AI_CONFIG_HOME` to put that file elsewhere. Start a new Lead session after
 changing Lead routing; active sessions cannot change their own model. Other routing
@@ -229,8 +232,36 @@ avoid duplicate discovery or personal Claude skill precedence. To switch an exis
 project copy to global, remove the project copy with `npx skills remove multi-ai --yes`
 from that project, then run the global installer.
 
-Without Node, copy SKILL.md, policy.yaml, roles/, prompts/ and schemas/ into both
-user skill directories. Maintain both copies together; no script is needed to use them.
+Manual skill copies need SKILL.md, policy.yaml, codex-profile.toml, roles/, prompts/,
+references/ and schemas/. Maintain both provider copies together. Node is required
+for the optional manifest/packet CLI; Orca remains the execution mechanism.
+
+## Frozen role packets
+
+Orca supplies the native worker preamble. Multi-AI supplies a short shared core,
+one role and the specific Task, with the Lead manual loaded only for coordination.
+Follow-up messages carry changes rather than the whole policy again. This reduces
+project instruction repetition; it does not suppress Orca's native contract.
+
+The local CLI can compare discovered policy copies and freeze worker context:
+
+```sh
+multi-ai-cli context manifest --root /path/to/multi-ai --compare /path/to/other-copy --json
+multi-ai-cli context pack --root /path/to/multi-ai --out /persistent/run-artifacts --role engineer --task-file /persistent/task.md --report-path /persistent/run-artifacts/result-1.json --json
+```
+
+Use explicit paths on the worker's execution host. The artifact directory and unique
+report path belong outside disposable source checkouts. The packet references its
+frozen result schema and recovery guide; it grants no orchestration authority.
+Pass its path and SHA-256 in a short native Task and verify the actual Task contents.
+Manifest comparison detects file drift, not which skill a provider actually loaded.
+A legitimate symlink at the policy root is supported; escaping child links fail.
+
+See [context delivery](references/context-delivery.md) for hashing, literal text,
+recovery checks and rollout. The CLI only reads/writes files; it does not launch
+providers, track lifecycle or validate reports. Host routing overrides remain
+separate from the frozen policy, and survive updates. Check `multi-ai-cli diff`
+when an effective model is older than the shipped default.
 
 ## Activate for ordinary requests
 
@@ -315,7 +346,10 @@ not synchronize settings to a different Orca installation.
 
 ## Update and remove
 
-In the source clone, run `git pull --ff-only`, then re-run `./install.ps1` or
+First settle all affected Runs and Lead sessions on this host; preserve frozen
+artifacts and resolve duplicate project/user skill copies. Follow the
+[rollout checks](references/context-delivery.md#rollout). In the source clone,
+run `git pull --ff-only`, then re-run `./install.ps1` or
 `sh ./install.sh`. The scripts refresh the published global skill through the CLI.
 Host overrides under `~/.multi-ai/` survive updates; direct edits inside the
 installed skill do not.
@@ -364,7 +398,8 @@ Models, permissions and base configuration are unchanged.
 
 Add `--profile multi-ai` to your Codex launcher. Review/trust the native hook in
 `/hooks`, then start a new session. It injects a short reminder at startup/resume/compact
-with a 400 approximate-token limit; policy re-reads still consume context. See native
+with a 400 approximate-token limit. Recovery retrieves the native Task first and
+only missing context afterward; it does not request a complete policy reread. See native
 [hooks](https://learn.chatgpt.com/docs/hooks) and
 [profiles](https://learn.chatgpt.com/docs/config-file/config-advanced#profiles).
 

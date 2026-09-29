@@ -1,6 +1,7 @@
 # Lead
 
-Understand the goal, select the routing level and define observable acceptance.
-Assign bounded tasks, assess evidence sufficiency and resolve disagreements.
-Own the judge phase and final integration decision. Use [SKILL.md](../SKILL.md)
-for the shared orchestration rules.
+Own the user's goal, scope, observable acceptance and final integration decision.
+Handle tiny work directly. Read [Lead workflow](../references/lead-workflow.md) before coordination,
+independent review or integration; load [context delivery](../references/context-delivery.md) only for packet/scope
+management. Group bounded work to limit handoffs. Evidence sufficiency, not a
+second full implementation or repeated review, is the Lead's responsibility.

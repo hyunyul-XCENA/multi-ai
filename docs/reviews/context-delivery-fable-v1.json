@@ -1,0 +1,127 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "reviewer_id": "ctx_249d2013eb81",
+  "maker_id": "term_a7d61d2a-f921-476a-9963-05670f66833d",
+  "review_target": null,
+  "verification_performed": [
+    {
+      "command": "cat design-v1.md; cat SKILL.md prompts/dispatch.md prompts/recover.md codex-profile.toml schemas/review-result.schema.json roles/*.md prompts/review.md prompts/judge.md policy.yaml README.md install.ps1",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": 0,
+      "result": "설계 v1과 현재 파일 전부 읽음. worktree의 docs/context-delivery-design.md(untracked)는 frozen design-v1.md와 바이트 단위로 동일."
+    },
+    {
+      "command": "diff -r --strip-trailing-cr C:/Users/hyunyul/.agents/skills/multi-ai . -x .git -x docs -x .agents -x .claude -x skills-lock.json -x node_modules -q",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": 0,
+      "result": "전역 설치본(~/.agents/skills/multi-ai)은 repo HEAD 352cba4와 내용 동일(CRLF 차이만). ~/.claude/skills/multi-ai는 그 경로로의 symlink."
+    },
+    {
+      "command": "diff -rq --strip-trailing-cr .agents/skills/multi-ai . -x .git -x docs -x .agents -x .claude -x skills-lock.json -x node_modules -x .gitignore",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": 1,
+      "result": "worktree 안 project-scope 사본(.agents/skills/multi-ai, 2026-09-14, .gitignore로 제외)은 SKILL.md/dispatch.md/policy.yaml/roles/lead.md/prompts/judge.md 등 13개 파일이 다르고 multi-ai-cli.mjs가 없음. 구버전 SKILL.md에는 multi-ai-cli route 필수 규칙과 evidence sufficiency 절이 없음. 설계 문서의 \"원본과 프로젝트 사본이 다르다\" 주장은 사실로 확인."
+    },
+    {
+      "command": "cat C:/Users/hyunyul/.agents/.skill-lock.json; cat skills-lock.json",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": 0,
+      "result": "전역 lock은 skills.multi-ai.skillFolderHash=352cba4d…(repo commit SHA), project lock은 computedHash=dc6182a5…(sha256). 같은 skill에 두 종류의 version 식별자가 이미 존재."
+    },
+    {
+      "command": "ls C:/Users/hyunyul/.codex/multi-ai.config.toml",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": 2,
+      "result": "Codex recovery profile이 이 host에 설치되어 있지 않음. 현재 host에서 recover.md는 어떤 세션에도 주입되지 않는다."
+    },
+    {
+      "command": "orca --version; orca orchestration worker-start --help; orca orchestration --help; orca skills get orchestration; orca skills get orchestration --reference references/worker-contract.md",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": 0,
+      "result": "Orca 1.4.205. worker-start 도움말: \"Not every worker has a terminal\", --model/--effort는 --terminal과 결합 불가. 가이드: 유효한 worker_done이 Task/Dispatch를 자동 settle, release는 별도, consumer_fenced만이 교체 신호, 빈 check는 교체가 아님."
+    },
+    {
+      "command": "orca orchestration dispatch-show --task task_67590499e34b --preamble --from term_eb7ef6f6-fe0b-4ac4-86d9-c0fb306480e7 --json",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": 0,
+      "result": "worker 자신의 handle로 자기 Dispatch의 preamble 전문, capability_hash, contract_version=1, run_id, creator_handle을 native하게 다시 받을 수 있음. 설계가 말하는 \"native 계약 복구\" 경로가 이미 존재하며 설계는 이를 언급하지 않음."
+    },
+    {
+      "command": "node write-review.js (ad-hoc structural check of this report against schemas/review-result.schema.json: required keys, enums, blocking-finding rule, check shape)",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": 0,
+      "result": "이 보고서 구조 검사 통과. ajv/jsonschema 미설치라 완전한 JSON Schema 검증기는 실행하지 않음."
+    },
+    {
+      "command": "(not run) baseline measurement of dispatch/recovery payload sizes and policy read counts",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": null,
+      "result": "실행하지 않음. 설계 범위(architecture review)에 벤치마크 없음. finding F5에서 측정 방법 부재를 지적."
+    }
+  ],
+  "findings": [
+    {
+      "id": "F1",
+      "blocking": true,
+      "claim": "lifecycle outcome 매핑 규칙이 core 분리 후 어느 문서에도 배정되지 않아 worker가 잘못된 --outcome을 보낼 수 있다.",
+      "location": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/design-v1.md §공통 core와 역할 분리 (\"core에서 빠지면 안 되는 내용\" 목록) vs C:/Users/hyunyul/orca/workspaces/multi-ai/dev/SKILL.md §Reports and verification",
+      "observation": "현재 SKILL.md는 \"WorkerResult ok=완료, needs_revision/blocked=failure; 완료된 CHANGES_REQUESTED 리뷰는 succeeded, 미완료 리뷰는 failed\"를 명시하며 worker는 dispatch.md를 통해 SKILL.md 전체를 받아 이 규칙을 본다. 설계의 core 필수 목록 6개와 lead 전용 이동 목록 어디에도 이 매핑이 없다. 재현 시나리오: reviewer가 blocking finding을 내고 worker_done --outcome failed를 보냄 → Orca가 failed attempt로 기록 → Lead가 recovery-and-cleanup에 따라 재시도 dispatch → 두 번째 reviewer가 같은 report 경로에 기록하여 settled report를 덮어씀(SKILL.md \"do not overwrite a settled report\" 위반). 반대 방향: engineer가 needs_revision인데 succeeded로 보내면 Lead의 judge가 실패한 작업을 완료로 취급한다. 수정: 이 매핑과 \"settled report 보존, report 경로는 Dispatch당 유일\"을 core 필수 목록에 추가하고, 회귀 시나리오에 \"CHANGES_REQUESTED 리뷰의 worker_done outcome=succeeded\" 관찰을 넣는다."
+    },
+    {
+      "id": "F2",
+      "blocking": true,
+      "claim": "worker의 compact/resume 복구는 주입 경로가 없고, 설계가 native 복구 명령을 지정하지 않아 \"gap을 보고한다\"가 실행 불가능하다.",
+      "location": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/design-v1.md §복구 정책 (표 \"resume 또는 compact\" 행, \"native 계약을 복구할 수 없으면 lifecycle mutation을 멈추고 gap을 보고한다\")",
+      "observation": "recover.md를 주입하는 유일한 기구는 codex-profile.toml이며 README가 명시하듯 worker나 Claude에는 전파되지 않고, 이 host에는 설치조차 되어 있지 않다(~/.codex/multi-ai.config.toml 없음). Claude Code worker는 compaction 요약만 남는다. 재현: Claude engineer worker가 장기 작업 중 compact → 요약에서 dispatch-capability와 \"다른 worker를 만들지 않는다\"가 빠짐 → CLAUDE.md 활성화 문구(\"consult the installed multi-ai skill\")를 따라 전역 SKILL.md를 읽음 → Lead 문서를 보고 자신을 Lead로 오인하거나, capability가 없어 escalation조차 못 보냄. 설계는 \"gap 보고\"를 요구하지만 gap 보고 자체가 native 계약(--from, --dispatch-capability)을 필요로 한다. 검증된 native 경로가 이미 있다: orca orchestration dispatch-show --task <task_id> --preamble --from <handle> --json 은 worker 자신의 handle로 preamble 전문·capability_hash·contract_version을 돌려준다(이 Dispatch에서 실제 실행, exit 0). 수정: (a) 복구 정책 표의 worker 행에 \"task_id/handle이 남아 있으면 dispatch-show --preamble로 native 계약을 재취득, 없으면 어떤 lifecycle 명령도 보내지 않고 사용자 터미널에 상태만 출력\"을 명시; (b) 역할별 checkpoint의 provider별 주입 경로(Codex: profile hook / Claude: dispatch 텍스트 안에 core 포함, hook 없음)를 표로 확정; (c) 회귀 시나리오 1을 provider별(Codex, Claude) 두 케이스로 분리."
+    },
+    {
+      "id": "F3",
+      "blocking": true,
+      "claim": "정책 version 식별과 drift 감지가 \"누가·무엇을·언제 계산하는지\" 없이 요구되어 Phase A에서 구현 불가능하고, 실제 존재하는 drift 사례를 잡지 못한다.",
+      "location": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/design-v1.md §Dispatch 입력 (\"정책 버전은 배포 bundle의 명시적 revision 또는 content digest\") 및 §변경 파일 계획 (multi-ai-cli.mjs는 Phase B만)",
+      "observation": "설계는 task 명세에 \"정책 원본 경로와 버전 식별\"을 요구하면서 CLI 변경은 Phase B로 미룬다. 따라서 Phase A의 Lead는 digest를 손으로 계산해야 하는데 파일 집합·알고리즘이 정의되지 않아 두 Lead가 낸 digest는 비교 불가능하다. 이미 두 가지 식별자가 공존한다: 전역 설치는 ~/.agents/.skill-lock.json의 skillFolderHash(=git commit SHA 352cba4d), project-scope 설치는 skills-lock.json의 computedHash(sha256). 설계는 둘 다 언급하지 않는다. 재현 가능한 drift: 이 worktree에는 .gitignore로 숨겨진 .agents/skills/multi-ai (2026-09-14 구버전, 13개 파일 상이, multi-ai-cli.mjs 없음)가 있다. 이 worktree에서 Codex Lead를 띄우면 project skill이 발견되고 구버전 SKILL.md에는 multi-ai-cli route 필수 규칙이 없어 Lead가 policy.yaml에서 route를 손으로 조립한다. 신버전 기준으로는 routing error지만 어느 쪽도 이를 감지하지 못한다. 추가로 install.ps1은 로컬 clone이 아니라 GitHub dev HEAD를 설치하므로 \"기존 설치 흐름으로 명시적 배포\"는 push가 선행되어야 하고, 로컬 미푸시 변경은 배포되지 않는다. 수정: (a) Phase A1에 최소 CLI 변경 하나를 허용해 multi-ai-cli route --json(이미 policy 경로를 출력)에 로딩된 SKILL.md 경로와 lock의 hash를 함께 출력하게 하거나, 그것이 싫으면 Phase A의 버전 식별을 \"route --json이 출력한 policy 경로 + git -C <clone> rev-parse HEAD 또는 lock hash\"로 문서상 고정; (b) 회귀 시나리오 6의 관찰을 \"project-scope 사본과 전역 사본의 hash 불일치 시 Lead가 dispatch 전에 보고한다\"로 구체화하고, 이 저장소 자체의 stale .agents 사본 제거를 A1 산출물에 넣는다; (c) README/install 계획에 \"push 후 install\" 순서를 명시."
+    },
+    {
+      "id": "F4",
+      "blocking": true,
+      "claim": "\"진행 중 Task는 기록된 정책 버전으로 끝낸다\"는 이전 버전 파일이 보존되지 않아 실행 불가능하고, 그 대안 규칙은 업데이트마다 모든 in-flight worker를 blocking 상태로 만든다.",
+      "location": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/design-v1.md §변경 파일 계획 마지막 문단 (\"진행 중 Task는 그 Task의 기록된 정책 버전으로 끝내고 … 이전 버전 파일을 읽을 수 없으면 조용히 새 버전으로 바꾸지 않고 gap을 보고한다\")",
+      "observation": "설치 흐름(npx skills add --global)은 ~/.agents/skills/multi-ai를 제자리에서 덮어쓴다. 이전 revision의 파일은 host에 남지 않는다. 재현: Run 진행 중 사용자가 install.ps1 재실행 → worker가 compact 후 복구하며 기록된 version(예: 352cba4)과 현재 파일 hash가 다름을 발견 → 설계 규칙대로 \"이전 버전 파일을 읽을 수 없으니 gap 보고\" → 모든 활성 worker가 동시에 escalation → Lead는 복구할 수단이 없어 Run을 접어야 한다. 이는 rollback 조건(\"복구 실패 시 기존 입력 방식으로 rollback\")을 스스로 유발한다. 수정: in-flight Task의 정책은 파일 경로가 아니라 Orca가 이미 영속화하는 dispatch 텍스트에 core(짧으므로 inline 가능)와 역할 본문을 넣어 고정하고, resume 시 dispatch-show로 그 텍스트를 다시 받는다. 디스크 파일 재독은 \"새 Dispatch부터\"로 한정. 또는 \"활성 Run이 있는 동안 install 금지\"를 운영 규칙으로 두고 설계에 그렇게 적는다. 둘 중 하나를 선택해 문서화해야 한다."
+    },
+    {
+      "id": "F5",
+      "blocking": true,
+      "claim": "채택 조건이 측정 가능하지 않다: baseline 데이터 원천과 회귀 시나리오별 관찰이 정의되지 않았다.",
+      "location": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/design-v1.md §검증 계획과 채택 조건, §단계별 산출물 A0",
+      "observation": "A0는 \"injection 발생 지점과 실제 로딩 scope 계측\"을 요구하지만 무엇을 읽어 셀지 없다. 쓸 수 있는 원천은 있다: Codex 세션 로그(CODEX_HOME/sessions/*.jsonl)와 Claude Code transcript(~/.claude/projects/<proj>/*.jsonl)에서 SKILL.md/policy.yaml/roles/*.md 경로에 대한 read/shell 호출 횟수, 메시지별 input token, Orca dispatch 텍스트 길이(dispatch-show --json의 preamble 길이). 설계는 이를 지정하지 않아 \"30% 감소\"의 분모가 없다. 회귀 시나리오 1,2,5,6,7도 pass/fail 관찰이 없다. 예: 시나리오 2 \"중복 worker 없음\"은 orca orchestration run-show <run> --json의 Dispatch 수가 Task 수와 같다는 관찰로, 시나리오 5는 worker-show observation.status가 죽었는데 worker_done 없이는 Task status가 dispatched로 남는다는 관찰로, 시나리오 7은 worker_done 후 dispatch status=completed 및 worker-release receipt로 정의할 수 있다. 수정: 각 시나리오에 \"실행할 명령 + 기대 관찰 + 실패 시 관찰\" 세 칸을 붙이고, A0의 계측 원천을 파일 경로 수준으로 적는다. 이것 없이는 A2의 \"필수 회귀 시나리오 모두 통과\"를 리뷰어가 확인할 수 없다."
+    },
+    {
+      "id": "F6",
+      "blocking": false,
+      "claim": "Phase B validator의 trust boundary가 \"별도 제공된 receipt\"라는 표현으로 남아 있어 모델이 만든 입력을 그대로 신뢰할 여지가 있다.",
+      "location": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/design-v1.md §기계적 검증과 의미 판단 (Phase B 문단)",
+      "observation": "\"별도 제공된 native receipt/Git 관찰과 비교\"에서 제공자가 누구인지 없다. Lead가 worker report에서 복사한 SHA를 expected로 넘기고 worker가 쓴 receipt 파일을 actual로 넘기면 둘 다 모델 산출물이라 설계 자신이 배제한 \"expected vs actual만 비교\" 방식과 같아진다. Phase B 설계 시점에 고정할 것: validator가 스스로 git -C <checkout> rev-parse HEAD / git status --porcelain 과 orca orchestration dispatch-show --json / worker-show --json 을 실행해 관찰을 얻고, 인자로는 report 경로와 checkout 경로만 받는다. Orca를 실행할 수 없으면 identity 검사는 unverifiable. 지금 blocking은 아니지만 Phase B 착수 조건으로 문서에 명시하기를 권한다."
+    },
+    {
+      "id": "F7",
+      "blocking": false,
+      "claim": "역할 분리 후 reviewer/engineer 역할 문서가 참조해야 할 \"짧은 계약\"의 내용과 전달 경로가 정의되지 않았다.",
+      "location": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/design-v1.md §공통 core와 역할 분리 (\"maker/checker 분리와 정확한 commit 리뷰는 lead 및 reviewer가 반드시 읽는 짧은 계약에 둔다\")",
+      "observation": "현재 roles/reviewer.md는 5줄이고 SHA 확인·HEAD/base/clean state 전후 검사·maker!=checker·same-family fallback 기록·exit_code null 규칙은 모두 SKILL.md와 review.md에 있다. 설계는 이를 \"짧은 계약\"으로 옮긴다고만 하고 어느 파일인지, reviewer가 그것을 어떻게 받는지(dispatch 입력 목록에는 core+역할+명세+schema만 있음) 없다. review.md가 dispatch 입력에 포함되는지 명시하고, engineer에 대해서도 \"실행 host에서 build/test\", \"authorized 변경만 commit\", \"checks not run 기록\"이 어느 문서에 남는지 표로 적어야 한다. 규칙 누락은 A1 diff에서 잡을 수 있으므로 blocking으로 두지 않는다."
+    },
+    {
+      "id": "F8",
+      "blocking": false,
+      "claim": "\"terminal 없는 worker\"를 확인해 놓고 설계 본문은 terminal 재사용 전제를 그대로 이어받는다.",
+      "location": "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/design-v1.md §확인된 현재 동작 6번째 항목 vs C:/Users/hyunyul/orca/workspaces/multi-ai/dev/SKILL.md §Explicit intelligence routing (\"Reuse a terminal only when …\")",
+      "observation": "worker-start 도움말은 --model/--effort가 --terminal과 결합 불가하고 terminal 없는 worker가 있다고 한다. 현재 SKILL.md의 terminal 재사용 규칙은 lead 전용으로 이동될 텐데, 설계는 이 규칙이 terminal 없는 worker에 어떻게 적용되는지(재사용 불가 → 항상 fresh start?) 말하지 않는다. lead reference 작성 시 \"terminal 없는 worker는 재사용 대상이 아니다\"를 한 줄 넣으면 된다."
+    }
+  ],
+  "residual_risk": [
+    "설계 문서만 검토했다. A1 구현 결과물(분리된 core/role 파일, 축소된 dispatch/recover)은 존재하지 않으므로 규칙 누락은 원칙 수준에서만 확인했다. A1 이후 현재 SKILL.md와의 문장 단위 diff 검토가 다시 필요하다.",
+    "dispatch-show --preamble을 worker handle로 호출할 수 있음은 이 Dispatch(local host, depth 1)에서만 확인했다. 원격(--on) worker나 terminal 없는 worker에서 같은 권한이 있는지는 확인하지 않았다.",
+    "baseline 계측·회귀 시나리오·성능 비교는 실행하지 않았다(범위 밖). F5의 계측 원천 제안은 로그 형식 확인 없이 경로만 든 것이다.",
+    "Codex recovery profile이 미설치 상태라 hook 동작(400 token 한도, matcher)은 문서와 install.ps1 코드로만 확인했다.",
+    "Reviewer(Claude Fable)와 maker(Codex Lead, coordinator handle)는 다른 family다. same-family fallback 없음."
+  ]
+}

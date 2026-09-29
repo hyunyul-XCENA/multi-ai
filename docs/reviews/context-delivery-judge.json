@@ -1,0 +1,83 @@
+{
+  "decision": "SELECT",
+  "candidate": "context-delivery-design v2; frozen design-v2.md SHA-256 a75abf0dd0fd22be5ffdde45929416de7bf9d525551e8dbfaff548b39b99e739",
+  "snapshot": null,
+  "rationale": "설계 v2를 구현 준비의 기준으로 선택한다. Fable v1의 blocking 5건을 보완했고 동일 Fable reviewer의 v2 독립 재리뷰는 APPROVED, blocking 0건이다. 구현·배포·성능 검증 완료가 아니다. non-blocking 7건은 구현 착수 조건으로 리뷰 기록에 보존했다.",
+  "objective_evidence": [
+    {
+      "command": "Orca worker-start and worker-show native receipts",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": 0,
+      "result": "Initial requested/effective claude-fable-5-1 medium matched; same reviewer terminal and process incarnation reused for ctx_d1de6a425687. Two exact Dispatch worker_done reports accepted."
+    },
+    {
+      "command": "node_repl: read ReviewResult files and check schema fields, verdict conditions and native identity",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": null,
+      "result": "Both report identities, null plan targets, fields/types and approval conditions checked. Not a general JSON Schema engine."
+    },
+    {
+      "command": "node_repl: compare frozen design-v2.md to delivered document",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": null,
+      "result": "Reviewed body preserved; only review status metadata and link added after approval."
+    },
+    {
+      "command": "orca orchestration worker-release --dispatch ctx_d1de6a425687 --json; check --ack delivery_fe197d07c581; worker-list --run run_41953fca315f --terminal-state reclaimable --json",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": 0,
+      "result": "Worker released, transcript archived, delivery acknowledged, reclaimable worker list empty."
+    },
+    {
+      "command": "git status --short",
+      "cwd": "C:/Users/hyunyul/orca/workspaces/multi-ai/dev",
+      "exit_code": 0,
+      "result": "Only new docs/ files; existing implementation and installed policies not changed."
+    }
+  ],
+  "review_reports": [
+    "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/fable-review-v1.json",
+    "C:/Users/hyunyul/AppData/Local/Temp/multi-ai-context-design-20260929/fable-review-v2.json"
+  ],
+  "blocking_findings": [
+    {
+      "finding": "fable-review-v1.json#F1",
+      "resolution": "fixed",
+      "evidence": "design-v2.md detailed contracts and fable-review-v2.json confirm resolution; see docs/reviews/context-delivery-review.md mapping."
+    },
+    {
+      "finding": "fable-review-v1.json#F2",
+      "resolution": "fixed",
+      "evidence": "design-v2.md detailed contracts and fable-review-v2.json confirm resolution; see docs/reviews/context-delivery-review.md mapping."
+    },
+    {
+      "finding": "fable-review-v1.json#F3",
+      "resolution": "fixed",
+      "evidence": "design-v2.md detailed contracts and fable-review-v2.json confirm resolution; see docs/reviews/context-delivery-review.md mapping."
+    },
+    {
+      "finding": "fable-review-v1.json#F4",
+      "resolution": "fixed",
+      "evidence": "design-v2.md detailed contracts and fable-review-v2.json confirm resolution; see docs/reviews/context-delivery-review.md mapping."
+    },
+    {
+      "finding": "fable-review-v1.json#F5",
+      "resolution": "fixed",
+      "evidence": "design-v2.md detailed contracts and fable-review-v2.json confirm resolution; see docs/reviews/context-delivery-review.md mapping."
+    }
+  ],
+  "rejected_alternatives": [
+    {
+      "candidate": "Remove native preamble and infer success from provider turn completion",
+      "reason": "Native authority/settlement contract must remain; turn completion does not establish task success."
+    },
+    {
+      "candidate": "Use a durable loaded=true flag to skip recovery reads forever",
+      "reason": "Compaction can remove context while external flags persist."
+    }
+  ],
+  "risks": [
+    "Design only; compact/resume, performance, remote and non-terminal behavior untested.",
+    "Seven non-blocking implementation follow-ups remain explicitly tracked; A1 changes need independent rule-mapping review and A2 tests."
+  ]
+}

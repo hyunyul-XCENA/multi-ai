@@ -10,4 +10,4 @@ Write JudgeResult for the decision, selected candidate/commit, objective checks,
 review references, blocker dispositions and remaining risks. When reusing a check,
 cite its original verifier/report in result; do not claim to have rerun it.
 For REVISE/BLOCK, include the next required action in rationale. Apply the integration
-conditions in [SKILL.md](../SKILL.md); this checklist does not dispatch a Judge worker.
+conditions in [Lead workflow](../references/lead-workflow.md); this checklist does not dispatch a Judge worker.

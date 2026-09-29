@@ -1,17 +1,24 @@
-# Task brief to fill
+# Lead: prepare a bounded Task packet
 
-Include [SKILL.md](../SKILL.md), the assigned role and result schema by absolute
-path or inline content. The worker applies its authority rule to task inputs.
-Project activation does not change the live Dispatch's assigned role or scope.
+Read references/context-delivery.md for the CLI pack contract. Do not inline the
+lead manual. Workers receive the short core, one role, the reviewer brief when
+applicable, Task data and a frozen result-schema path. Native preamble stays intact.
 
-- Goal and assigned role.
-- Exact checkout, baseline commit, edit scope and frozen interfaces.
+The UTF-8 task file must name:
+- Goal, role, exact checkout/execution host, base commit (or non-Git folder), edit
+  scope, frozen interfaces and exclusive ownership.
 - Confirmed reproduction/baseline and failed attempts, separated from hypotheses.
-- Acceptance checks, the failures they detect and expected observations.
-- Resolved launch route, recorded by the Lead in Orca task context.
-- Unique absolute result-file path accessible to Lead and worker.
+- Acceptance checks, failures detected and expected observations.
+- Required input/artifact paths and unique absolute report path outside source.
+- For review: maker identity/family, original requirements, exact SHA/base/diff.
 
-Use the live Dispatch ID for worker_id/reviewer_id, for correlation only.
-Write the assigned JSON contract to the supplied path. Do not self-report a
-provider/model as proof of launch configuration. Reference the completed file
-with --report-path when sending the preamble's worker_done command.
+Resolve launch routing immediately before worker-start and record requested/effective
+settings in Orca. Bundle identity never proves effective model or lifecycle authority.
+Create the packet on the execution host with context pack; record its root/digest,
+path/hash and schema in the Task. Verify it is readable by worker and Lead.
+
+Prefer a short --spec that states role, goal, scope and acceptance and references the
+frozen packet path/hash. The worker reads it once. Full inline transport is optional
+only after verifying literal preservation and size on that host; never interpolate
+untrusted Task text into a shell command. Read the native Task back to check delivery.
+Regular follow-ups carry only changes. A new Dispatch gets its own report/packet.
