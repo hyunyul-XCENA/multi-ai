@@ -109,7 +109,8 @@ native failed-attempt recovery; a timeout is not model unavailability. Neither i
 `agent_readiness` failure whose receipt shows the requested route as effective while
 the terminal shows the agent idle at its prompt: create a new Task and hand it over with
 `orchestration dispatch --task <id> --to <handle> --inject`, keeping the failed start's
-receipt as the launch provenance. `route` cannot
+receipt as the launch provenance. Read the screen right before injecting: a pending
+dialog (an update prompt, a credit notice) takes the injected Enter instead. `route` cannot
 know availability, so it never steps down on its own: ask for a rung with `--step`,
 and read `--ladder` to see what a family outage leaves. Record the substitution
 and any lost capability. For review, try the opposite-family primary
