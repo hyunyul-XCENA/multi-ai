@@ -105,7 +105,11 @@ Orca cannot combine model/effort selection with terminal reuse. Terminal-less wo
 use only a confirmed native reuse capability; otherwise settle/release and start fresh.
 
 Use a configured fallback only after confirmed primary-route unavailability, following
-native failed-attempt recovery; a timeout is not model unavailability. `route` cannot
+native failed-attempt recovery; a timeout is not model unavailability. Neither is an
+`agent_readiness` failure whose receipt shows the requested route as effective while
+the terminal shows the agent idle at its prompt: create a new Task and hand it over with
+`orchestration dispatch --task <id> --to <handle> --inject`, keeping the failed start's
+receipt as the launch provenance. `route` cannot
 know availability, so it never steps down on its own: ask for a rung with `--step`,
 and read `--ladder` to see what a family outage leaves. Record the substitution
 and any lost capability. For review, try the opposite-family primary
@@ -199,6 +203,10 @@ Track the exact worker handles, execution hosts and temporary worktree paths cre
 for the task in the existing Run/checkpoint. Keep reports and required evidence outside
 disposable worktrees. Release finished workers when no follow-up is needed; finish the
 audit below before the final response, rather than waiting for the user to notice clutter.
+A reviewer kept for a follow-up round stays only while a revision of its review is in
+progress; once the review is accepted, close it in the same turn instead of asking the
+user. `worker-release` on work handed over with `dispatch --inject` reports `retained`
+and leaves the terminal running: close it with `terminal close --terminal <handle> --tab`.
 
 1. Settle completion and acknowledge deliveries using the installed orchestration
    guide. Inspect all task-owned resources, including `retained` and replaced attempts,
