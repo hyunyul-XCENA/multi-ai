@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { parse, stringify } from 'yaml';
 import { CONTEXT_USAGE, contextCommand } from './lib/context.mjs';
 
-const VERSION = '0.7.3';
+const VERSION = '0.8.0';
 const AGENTS = ['codex', 'claude'];
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const CODEX_RULE_MARKER = '# Managed by multi-ai-cli.';
@@ -25,27 +25,31 @@ const configHome = path.resolve(process.env.MULTI_AI_CONFIG_HOME || path.join(os
 const configPath = path.join(configHome, 'policy.yaml');
 
 const routeGroups = [
-  { label: 'Lead', path: 'lead', slots: ['primary', 'fallback'] },
-  { label: 'Architect', path: 'roles.architect', slots: ['primary', 'fallback'] },
-  { label: 'Engineer', path: 'roles.engineer', slots: ['primary', 'fallback'] },
-  { label: 'Researcher', path: 'roles.researcher', slots: ['primary', 'fallback'] },
+  { label: 'Lead', short: 'lead', path: 'lead', slots: ['primary', 'fallback'] },
+  { label: 'Architect', short: 'architect', path: 'roles.architect', slots: ['primary', 'fallback'] },
+  { label: 'Engineer', short: 'engineer', path: 'roles.engineer', slots: ['primary', 'fallback'] },
+  { label: 'Researcher', short: 'researcher', path: 'roles.researcher', slots: ['primary', 'fallback'] },
   {
     label: 'Reviewer for OpenAI maker',
+    short: 'reviewer<-openai',
     path: 'roles.reviewer.by_maker_family.openai',
     slots: ['primary', 'fallback', 'same_family_fallback'],
   },
   {
     label: 'Reviewer for Anthropic maker',
+    short: 'reviewer<-anthropic',
     path: 'roles.reviewer.by_maker_family.anthropic',
     slots: ['primary', 'fallback', 'same_family_fallback'],
   },
   {
     label: 'Competition primary-family lane',
+    short: 'compete primary',
     path: 'competition.lanes.primary_family',
     slots: ['primary', 'fallback'],
   },
   {
     label: 'Competition alternate-family lane',
+    short: 'compete alternate',
     path: 'competition.lanes.alternate_family',
     slots: ['primary', 'fallback'],
   },
@@ -699,12 +703,14 @@ function optionTag(value, current, installedDefault) {
   return tags.length ? `  <- ${tags.join(' · ')}` : '';
 }
 
-function modelChoices(base, effective, agent, current, installedDefault) {
+function modelChoices(base, effective, agent, current, installedDefault, skipPath) {
   const models = new Map();
   for (const policy of [base, effective]) {
     for (const group of routeGroups) {
       for (const slot of group.slots) {
-        const route = getPath(policy, `${group.path}.${slot}`);
+        const path = `${group.path}.${slot}`;
+        if (path === skipPath) continue;
+        const route = getPath(policy, path);
         if (route?.agent !== agent || !route.model) continue;
         if (!models.has(route.model)) models.set(route.model, new Set());
         models.get(route.model).add(`${group.label} · ${slot.replaceAll('_', ' ')}`);
@@ -718,252 +724,303 @@ function modelChoices(base, effective, agent, current, installedDefault) {
   }));
 }
 
-async function editRoute(base, effective, routePath) {
-  const installedDefault = getPath(base, routePath);
-  const draft = { ...getPath(effective, routePath) };
-  let step = 0;
-  while (true) {
-    const current = getPath(effective, routePath);
-    const atDefault = routesEqual(current, installedDefault);
-    screen('Edit route', [
-      `${routePath}  ·  step ${step + 1} of 4`,
-      `Current: ${routeLabel(current)}${atDefault ? '  (installed default)' : ''}`,
-      atDefault ? undefined : `Default: ${routeLabel(installedDefault)}`,
-      `Editing: ${routeLabel(draft)}`,
-    ]);
-    if (step === 0) {
-      const agent = await choose(
-        'Agent / provider family',
-        AGENTS.map((value) => ({
-          name: `${value === 'codex' ? 'Codex' : 'Claude Code'}${optionTag(value, current.agent, installedDefault.agent)}`,
-          value,
-          description: `Provider family: ${base.families[value]}`,
-        })),
-        draft.agent,
-      );
-      if (agent === BACK) return;
-      draft.agent = agent;
-      const available = modelChoices(base, effective, draft.agent);
-      if (!available.some(({ value }) => value === draft.model)) draft.model = available[0]?.value;
-      if (!draft.model) throw new Error(`No configured models are available for ${draft.agent}.`);
-      step = 1;
-      continue;
-    }
-    if (step === 1) {
-      const available = modelChoices(
-        base,
-        effective,
-        draft.agent,
-        draft.agent === current.agent ? current.model : undefined,
-        draft.agent === installedDefault.agent ? installedDefault.model : undefined,
-      );
-      const model = await choose('Model', available, draft.model);
-      if (model === BACK) {
-        step = 0;
-        continue;
-      }
-      draft.model = model;
-      step = 2;
-      continue;
-    }
-    if (step === 2) {
-      const effort = await choose(
-        'Reasoning effort',
-        EFFORTS.map((value) => ({
-          name: `${value}${optionTag(value, current.effort, installedDefault.effort)}`,
-          value,
-          description: EFFORT_NOTES[value],
-        })),
-        draft.effort,
-      );
-      if (effort === BACK) {
-        step = 1;
-        continue;
-      }
-      draft.effort = effort;
-      step = 3;
-      continue;
-    }
-    const action = await choose(
-      'Apply this route?',
-      [
-        { name: `Apply  ${routeLabel(draft)}`, value: 'apply', description: 'Stage this route in the TUI.' },
-        {
-          name: `Restore default  ${routeLabel(installedDefault)}`,
-          value: 'restore',
-          description: atDefault
-            ? 'This route already matches the installed default.'
-            : 'Discard the draft and stage the installed default instead.',
-        },
-        { name: 'Cancel', value: 'cancel', description: 'Keep the current route.' },
-      ],
-      'apply',
-    );
-    if (action === BACK) {
-      step = 2;
-      continue;
-    }
-    if (action === 'cancel') return;
-    if (action === 'restore') {
-      setPath(effective, routePath, clone(installedDefault));
-      return;
-    }
-    setPath(effective, routePath, {
-      agent: coerceValue(`${routePath}.agent`, draft.agent),
-      model: coerceValue(`${routePath}.model`, draft.model),
-      effort: coerceValue(`${routePath}.effort`, draft.effort),
-    });
-    return;
-  }
+// A terminal can deliver several keypresses in one chunk, and emitKeypressEvents
+// emits them back to back, so reads go through a queue instead of a one-shot
+// listener. The reader detaches while a picker owns stdin.
+function keyReader() {
+  const queue = [];
+  let waiting = null;
+  const onKeypress = (input, key) => {
+    const event = { input, key: key || {} };
+    if (waiting) {
+      const resolve = waiting;
+      waiting = null;
+      resolve(event);
+    } else queue.push(event);
+  };
+  return {
+    attach() { queue.length = 0; process.stdin.on('keypress', onKeypress); },
+    detach() { process.stdin.off('keypress', onKeypress); waiting = null; },
+    read() {
+      if (queue.length) return Promise.resolve(queue.shift());
+      return new Promise((resolve) => { waiting = resolve; });
+    },
+  };
 }
 
-async function editGroup(base, effective, group) {
-  const slotPath = (slot) => `${group.path}.${slot}`;
-  const slotAtDefault = (slot) => routesEqual(getPath(effective, slotPath(slot)), getPath(base, slotPath(slot)));
-  while (true) {
-    const drifted = group.slots.filter((slot) => !slotAtDefault(slot));
-    screen(group.label, [
-      'Choose a route to edit',
-      drifted.length
-        ? `${drifted.length} of ${group.slots.length} routes differ from the installed default`
-        : 'Every route matches the installed default',
-    ]);
-    const choice = await choose(
-      group.label,
-      [
-        ...group.slots.map((slot) => ({
-          name: `${slot.replaceAll('_', ' ').padEnd(21)}${routeLabel(getPath(effective, slotPath(slot)))}${slotAtDefault(slot) ? '' : '  *'}`,
-          value: slot,
-          description: slotAtDefault(slot)
-            ? 'Installed default.'
-            : `* changed · installed default: ${routeLabel(getPath(base, slotPath(slot)))}`,
-        })),
-        new Separator(),
-        ...(drifted.length
-          ? [{
-            name: `Restore ${group.label} defaults`,
-            value: 'restore',
-            description: `Stage the installed default for ${drifted.length} route${drifted.length === 1 ? '' : 's'}.`,
-          }]
-          : []),
-        { name: '← Back', value: 'back' },
-      ],
-    );
-    if (choice === BACK || choice === 'back') return;
-    if (choice === 'restore') {
-      for (const slot of group.slots) setPath(effective, slotPath(slot), clone(getPath(base, slotPath(slot))));
-      continue;
+const FIELDS = ['agent', 'model', 'effort'];
+
+// Every editable line in one flat list: each route slot, then revision_rounds.
+function policyRows() {
+  const rows = [];
+  for (const group of routeGroups) {
+    for (const slot of group.slots) {
+      rows.push({
+        kind: 'route',
+        path: `${group.path}.${slot}`,
+        group: group.short,
+        slot: slot.replaceAll('_', ' ').replace('same family fallback', 'same-family'),
+      });
     }
-    await editRoute(base, effective, slotPath(choice));
   }
+  rows.push({ kind: 'rounds', path: 'revision_rounds', group: 'revision rounds', slot: '' });
+  return rows;
+}
+
+function fieldOptions(base, effective, row, field, skipPath) {
+  if (row.kind === 'rounds') return Array.from({ length: 10 }, (_, index) => index + 1);
+  if (field === 'agent') return AGENTS;
+  if (field === 'effort') return EFFORTS;
+  const agent = getPath(effective, `${row.path}.agent`);
+  return modelChoices(base, effective, agent, undefined, undefined, skipPath).map((choice) => choice.value);
+}
+
+// Changing the agent can strand the model on another family's id.
+function repairModel(base, effective, routePath) {
+  const agent = getPath(effective, `${routePath}.agent`);
+  const options = fieldOptions(base, effective, { kind: 'route', path: routePath }, 'model', routePath);
+  if (!options.length) throw new Error(`No configured models are available for ${agent}.`);
+  if (!options.includes(getPath(effective, `${routePath}.model`))) setPath(effective, `${routePath}.model`, options[0]);
+}
+
+function rowValue(effective, row, field) {
+  return row.kind === 'rounds' ? effective.revision_rounds : getPath(effective, `${row.path}.${field}`);
+}
+
+function rowAtDefault(base, effective, row) {
+  return row.kind === 'rounds'
+    ? effective.revision_rounds === base.revision_rounds
+    : routesEqual(getPath(effective, row.path), getPath(base, row.path));
+}
+
+function resetRow(base, effective, row) {
+  if (row.kind === 'rounds') effective.revision_rounds = base.revision_rounds;
+  else setPath(effective, row.path, clone(getPath(base, row.path)));
 }
 
 async function tui() {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY || !process.stdin.setRawMode) {
     throw new Error('TUI requires an interactive terminal. Use multi-ai-cli set <path> <value> instead.');
   }
   const { base, effective, legacy } = load();
-  const groupChoice = (group, index) => {
-    const drifted = group.slots.some(
-      (slot) => !routesEqual(getPath(effective, `${group.path}.${slot}`), getPath(base, `${group.path}.${slot}`)),
-    );
-    return {
-      name: `${group.label}${drifted ? '  *' : ''}`,
-      value: `group:${index}`,
-      description: `primary: ${routeLabel(getPath(effective, `${group.path}.primary`))}${drifted ? '   * differs from the installed default' : ''}`,
-    };
+  const rows = policyRows();
+  const plain = process.env.NO_COLOR !== undefined;
+  const color = (code, value) => (plain ? value : `[${code}m${value}[0m`);
+
+  let cursor = 0;
+  let field = 0;
+  let filter = '';
+  let typing = false;
+  let note = '';
+
+  const visible = () => {
+    if (!filter) return rows;
+    const needle = filter.toLowerCase();
+    return rows.filter((row) => `${row.group} ${row.slot} ${JSON.stringify(getPath(effective, row.path) ?? effective.revision_rounds)}`
+      .toLowerCase().includes(needle));
   };
+
+  const render = () => {
+    const shown = visible();
+    if (cursor >= shown.length) cursor = Math.max(0, shown.length - 1);
+    const width = Math.max(60, process.stdout.columns || 80);
+    const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+    const labelWidth = clamp(width - 46, 20, 34);
+    const labelRoom = labelWidth - 1; // keep a gutter before AGENT
+    const modelWidth = clamp(width - labelWidth - 22, 12, 24);
+    const cut = (text, size) => (text.length > size - 1 ? `${text.slice(0, size - 2)}…` : text);
+    const rowLabel = (row) => {
+      if (!row.slot) return cut(row.group, labelRoom);
+      // The slot is what separates sibling routes, so the group gives way first.
+      const room = labelRoom - row.slot.length - 3;
+      if (room >= 4) return `${cut(row.group, room + 1)} · ${row.slot}`;
+      return cut(`${row.group} · ${row.slot}`, labelRoom);
+    };
+    const changed = Object.keys(sparseOverrides(base, effective)).length;
+    const height = Math.max(8, (process.stdout.rows || 30) - 9);
+    const top = Math.max(0, Math.min(cursor - Math.floor(height / 2), shown.length - height));
+    const slice = shown.slice(Math.max(0, top), Math.max(0, top) + height);
+
+    const out = ['[H[2J[?25l'];
+    const say = (line) => out.push(`${line}\n`);
+
+    say(color('1', 'Multi-AI policy') + color('2', `   ${changed} override${changed === 1 ? '' : 's'}${legacy ? ' · legacy' : ''} · ${configPath}`));
+    say('');
+    say(color('2', `  ${'ROUTE'.padEnd(labelWidth)}${'AGENT'.padEnd(8)}${'MODEL'.padEnd(modelWidth)}EFFORT`));
+
+    for (const row of slice) {
+      const index = shown.indexOf(row);
+      const here = index === cursor;
+      const dirty = rowAtDefault(base, effective, row) ? ' ' : '*';
+      const cells = row.kind === 'rounds'
+        ? [{ field: 'rounds', text: String(effective.revision_rounds), width: 8 }]
+        : FIELDS.map((name, position) => ({
+          field: name,
+          text: String(rowValue(effective, row, name)),
+          width: position === 0 ? 8 : position === 1 ? modelWidth : 8,
+        }));
+      let line = `${here ? color('36', '>') : ' '}${color(dirty === '*' ? '33' : '2', dirty)}${rowLabel(row).padEnd(labelWidth)}`;
+      for (const [position, cell] of cells.entries()) {
+        const text = cut(cell.text, cell.width);
+        const focused = here && (row.kind === 'rounds' || position === field);
+        line += focused
+          ? color('7', text) + ' '.repeat(Math.max(1, cell.width - text.length))
+          : text.padEnd(cell.width);
+      }
+      say(here ? color('1', line) : line);
+    }
+
+    say('');
+    const row = shown[cursor];
+    if (row && !rowAtDefault(base, effective, row)) {
+      const original = row.kind === 'rounds' ? String(base.revision_rounds) : routeLabel(getPath(base, row.path));
+      say(color('2', `  installed default: ${original}`));
+    } else if (row) {
+      say(color('2', '  installed default'));
+    } else {
+      say(color('2', '  no rows match the filter'));
+    }
+    say('');
+    if (typing) {
+      say(color('36', `  /${filter}`) + color('2', '   ⏎ apply · esc clear'));
+    } else if (note) {
+      say(color('33', `  ${note}`));
+    } else {
+      say(color('2', '  ↑↓ row · ←→ field · space next value · ⏎ pick · r reset row · R reset all'));
+    }
+    say(color('2', `  / filter${filter ? ` (${filter})` : ''} · s save · q quit`));
+    process.stdout.write(out.join(''));
+  };
+
+  process.stdin.resume();
+  readline.emitKeypressEvents(process.stdin);
+  const wasRaw = process.stdin.isRaw;
+  process.stdin.setRawMode(true);
+  const keys = keyReader();
+  keys.attach();
+
+  // A picker attaches its own listener, so hand stdin over and take it back.
+  const pick = async (...args) => {
+    keys.detach();
+    process.stdout.write('[H[2J');
+    try {
+      return await choose(...args);
+    } finally {
+      process.stdin.resume();
+      process.stdin.setRawMode(true);
+      keys.attach();
+    }
+  };
+
+  const restore = () => {
+    keys.detach();
+    process.stdin.setRawMode(Boolean(wasRaw));
+    process.stdin.pause();
+    process.stdout.write('[?25h');
+  };
+
   try {
     while (true) {
-      const changed = Object.keys(sparseOverrides(base, effective)).length;
-      screen(
-        'Host configuration',
-        `${changed} override${changed === 1 ? '' : 's'} · ${configPath}${legacy ? ' · legacy setting loaded' : ''}`,
-      );
-      const choice = await choose(
-        'What would you like to configure?',
-        [
-          new Separator('── Roles ──'),
-          ...routeGroups.slice(0, 4).map((group, index) => groupChoice(group, index)),
-          new Separator('── Review ──'),
-          ...routeGroups.slice(4, 6).map((group, offset) => groupChoice(group, offset + 4)),
-          new Separator('── Competition ──'),
-          ...routeGroups.slice(6).map((group, offset) => groupChoice(group, offset + 6)),
-          new Separator('── Policy ──'),
-          {
-            name: 'Revision rounds',
-            value: 'revision',
-            description: `Current limit: ${effective.revision_rounds}`,
-          },
-          {
-            name: 'Restore installed defaults',
-            value: 'restore',
-            description: changed
-              ? `Clear all ${changed} staged override${changed === 1 ? '' : 's'}.`
-              : 'Nothing to clear. Everything already matches the installed default.',
-          },
-          new Separator(),
-          {
-            name: `✓ Save and exit${changed ? ` (${changed} overrides)` : ''}`,
-            value: 'save',
-            description: 'Write the host policy and exit.',
-          },
-          { name: '× Discard and exit', value: 'discard', description: 'Leave the host policy unchanged.' },
-        ],
-        'group:0',
-      );
+      render();
+      const { input, key } = await keys.read();
+      note = '';
+      const shown = visible();
+      const row = shown[cursor];
 
-      if (choice === BACK) {
+      if (key.ctrl && key.name === 'c') {
+        restore();
         console.clear();
         console.log('No changes saved.');
+        process.exitCode = 130;
         return;
       }
-      if (choice.startsWith('group:')) {
-        await editGroup(base, effective, routeGroups[Number(choice.split(':')[1])]);
+
+      if (typing) {
+        if (key.name === 'return' || key.name === 'enter') typing = false;
+        else if (key.name === 'escape') { filter = ''; typing = false; }
+        else if (key.name === 'backspace') filter = filter.slice(0, -1);
+        else if (input && !key.ctrl && !key.meta && input >= ' ') filter += input;
         continue;
       }
-      if (choice === 'revision') {
-        screen('Revision rounds', 'Maximum correction cycles before the Lead reports a blocker');
-        const rounds = await choose(
-          'Revision-round limit',
-          Array.from({ length: 10 }, (_, index) => ({ name: String(index + 1), value: index + 1 })),
-          effective.revision_rounds,
-        );
-        if (rounds !== BACK) effective.revision_rounds = rounds;
-        continue;
-      }
-      if (choice === 'restore') {
-        const confirmed = await choose(
-          'Restore every installed default?',
-          [
-            { name: 'No, keep my staged settings', value: false },
-            { name: 'Yes, clear all host overrides', value: true },
-          ],
-          false,
-        );
-        if (confirmed !== BACK && confirmed) {
-          const restored = clone(base);
-          for (const key of Object.keys(effective)) delete effective[key];
-          Object.assign(effective, restored);
+
+      if (key.name === 'up') cursor = Math.max(0, cursor - 1);
+      else if (key.name === 'down') cursor = Math.min(shown.length - 1, cursor + 1);
+      else if (key.name === 'left') field = Math.max(0, field - 1);
+      else if (key.name === 'right') field = Math.min(FIELDS.length - 1, field + 1);
+      else if (key.name === 'home') cursor = 0;
+      else if (key.name === 'end') cursor = shown.length - 1;
+      else if (input === '/') { typing = true; filter = ''; }
+      else if (row && (input === ' ' || key.name === 'space')) {
+        const name = row.kind === 'rounds' ? 'rounds' : FIELDS[field];
+        const options = fieldOptions(base, effective, row, name);
+        const next = options[(options.indexOf(rowValue(effective, row, name)) + 1) % options.length];
+        if (row.kind === 'rounds') effective.revision_rounds = next;
+        else {
+          setPath(effective, `${row.path}.${name}`, coerceValue(`${row.path}.${name}`, String(next)));
+          if (name === 'agent') repairModel(base, effective, row.path);
         }
-        continue;
-      }
-      if (choice === 'discard') {
-        console.clear();
-        console.log('No changes saved.');
-        return;
-      }
-      if (choice === 'save') {
+      } else if (row && (key.name === 'return' || key.name === 'enter')) {
+        const name = row.kind === 'rounds' ? 'rounds' : FIELDS[field];
+        const current = rowValue(effective, row, name);
+        const fallbackDefault = row.kind === 'rounds' ? base.revision_rounds : getPath(base, `${row.path}.${name}`);
+        const options = fieldOptions(base, effective, row, name);
+        const items = name === 'model'
+          ? modelChoices(base, effective, getPath(effective, `${row.path}.agent`), current, fallbackDefault)
+          : options.map((value) => ({
+            name: `${value}${optionTag(value, current, fallbackDefault)}`,
+            value,
+            description: name === 'effort' ? EFFORT_NOTES[value] : name === 'agent' ? `Provider family: ${base.families[value]}` : '',
+          }));
+        const picked = await pick(`${row.group}${row.slot ? ` · ${row.slot}` : ''} · ${name}`, items, current);
+        if (picked !== BACK) {
+          if (row.kind === 'rounds') effective.revision_rounds = picked;
+          else {
+            setPath(effective, `${row.path}.${name}`, coerceValue(`${row.path}.${name}`, String(picked)));
+            if (name === 'agent') repairModel(base, effective, row.path);
+          }
+        }
+      } else if (row && input === 'r') {
+        resetRow(base, effective, row);
+        note = `${row.group}${row.slot ? ` · ${row.slot}` : ''} restored to the installed default.`;
+      } else if (input === 'R') {
+        const confirmed = await pick('Restore every installed default?', [
+          { name: 'No, keep my changes', value: false },
+          { name: 'Yes, clear all overrides', value: true },
+        ], false);
+        if (confirmed === true) {
+          for (const key of Object.keys(effective)) delete effective[key];
+          Object.assign(effective, clone(base));
+          note = 'All overrides cleared.';
+        }
+      } else if (input === 's') {
         const overrides = sparseOverrides(base, effective);
         writeOverrides(overrides);
+        restore();
         console.clear();
-        console.log(`✓ Saved ${Object.keys(overrides).length} override(s).`);
+        console.log(`Saved ${Object.keys(overrides).length} override(s).`);
         console.log(`  ${configPath}`);
         console.log('\nStart a new Lead session after changing its route.');
+        return;
+      } else if (input === 'q' || key.name === 'escape') {
+        if (filter) { filter = ''; continue; }
+        const pending = sparseOverrides(base, effective);
+        const saved = fs.existsSync(configPath) ? readOverrides(base).overrides : {};
+        const same = (map) => JSON.stringify(Object.entries(map).sort(([a], [b]) => a.localeCompare(b)));
+        if (same(pending) !== same(saved)) {
+          const confirmed = await pick('Discard unsaved changes?', [
+            { name: 'No, keep editing', value: false },
+            { name: 'Yes, discard and quit', value: true },
+          ], false);
+          if (confirmed !== true) continue;
+        }
+        restore();
+        console.clear();
+        console.log('No changes saved.');
         return;
       }
     }
   } catch (error) {
+    restore();
     if (error?.name === 'ExitPromptError') {
       console.clear();
       console.log('No changes saved.');

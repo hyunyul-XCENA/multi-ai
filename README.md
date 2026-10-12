@@ -112,16 +112,28 @@ unchanged settings continue to receive new defaults. Open the full terminal UI w
 multi-ai-cli tui
 ```
 
-The TUI derives its model choices from the installed policy and current overrides.
-Choose an agent, model and effort from menus; you do not need to remember or type a
-model ID. Use `Esc` or `q` to return one step; at the root they exit without saving.
-Direct `set` remains available for deliberately testing a new identifier.
+Every route is one row of a single table, so a value is visible and reachable
+without walking a menu:
 
-Every TUI screen shows what a route is set to right now. Role menus list each route
-as `agent / model / effort` and mark the ones that differ from the installed policy
-with `*`; the route editor prints Current, Default and Editing in its header and tags
-the agent, model and effort you are on with `<- current` and `<- default`. Role menus
-and the route editor both offer a restore entry that stages the installed default.
+```
+  ROUTE                             AGENT   MODEL                   EFFORT
+> lead · primary                    codex   gpt-6-astra             xhigh
+  lead · fallback                   claude  claude-fable-5-1        medium
+ *architect · primary               claude  claude-fable-5-1        high
+```
+
+`↑`/`↓` moves between routes and `←`/`→` between agent, model and effort. `space`
+steps the highlighted value to the next one; `⏎` opens a picker instead, which names
+each option's provider family or effort tradeoff and tags the current and installed
+values. Changing the agent carries the model to that family's list. `*` marks a row
+that differs from the installed policy and the line under the table names what it
+shipped as.
+
+`r` restores the row under the cursor, `R` every row. `/` filters by route name or
+value, so `/engineer` leaves the two Engineer rows. `s` saves and `q` quits, asking
+first if anything is unsaved. Model choices come from the installed policy and the
+current overrides, so `set` remains the way to try an identifier that is not in use
+yet.
 
 ### Resolve a route before dispatch
 

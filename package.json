@@ -1,6 +1,6 @@
 {
   "name": "multi-ai-cli",
-  "version": "0.7.3",
+  "version": "0.8.0",
   "private": true,
   "description": "Host-local policy configuration for Multi-AI",
   "type": "module",
