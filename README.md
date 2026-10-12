@@ -16,28 +16,30 @@ flowchart TD
     Human["Engineering task"] --> Lead["Lead: assess scope and uncertainty"]
     Lead -->|"Tiny or mechanical"| Direct["Direct edit and checks"]
     Direct --> Report["Report to human"]
-    Lead -->|"Localized implementation"| Local["Lead implements"]
-    Lead -->|"Useful delegation"| Engineer["Engineer implements"]
-    Lead -->|"Design questions"| Architect["Architect"]
-    Lead -->|"Evidence needed"| Researcher["Researcher"]
-    Architect --> Lead
-    Researcher --> Lead
-    Lead -->|"Independent hypotheses useful"| Competition["Separate solution lanes"]
+    Lead -->|"Default, at any size"| Local["Lead implements"]
+    Lead -->|"Separable question only"| Worker["Engineer, Architect or Researcher"]
+    Worker --> Lead
+    Lead -->|"Uncertain cause, high blast radius"| Competition["Separate solution lanes"]
     Competition --> Compare["Initial results complete; critique and compare"]
     Compare --> Lead
     Local --> Review["Independent review and checks; prefer opposite family"]
-    Engineer --> Review
     Review --> Judge["Lead: assess evidence and judge"]
     Judge -->|"Exact SHA reviewed; blockers resolved"| Integrate["Lead integrates"]
     Judge -->|"Revision needed"| Lead
     Integrate --> Report
 ```
 
-Paths are choices, not worker counts. The Lead creates every Orca worker.
-Architect covers structure and tradeoffs; Researcher gathers evidence and hypotheses.
+The Lead does the work. An extra session has to earn its place by answering a
+question it can settle without constantly re-syncing the main problem, and whose
+answer can be checked on its own; independent review is the standing exception,
+because the checker must not share the maker's understanding. Architect and
+Researcher are dispatches for a named question, not standing roles, and the Lead
+creates every Orca worker.
+
 The short core applies to everyone. Workers load only their role and Task packet.
-The [Lead workflow](references/lead-workflow.md) defines routing, review and
-integration requirements, including Lead-authored code.
+The [Lead workflow](references/lead-workflow.md) covers review and integration,
+including Lead-authored code; [delegation](references/delegation.md) carries the
+test above and is read only before starting a worker other than a reviewer.
 
 ## Install once per host
 
@@ -294,9 +296,9 @@ Check behavior during real work; no paid demo is needed:
 
 | Task alone | Expected decision |
 | --- | --- |
-| "Fix this typo in README." | [SIMPLE](examples/simple.md): direct edit and checks. |
-| "Add input validation to this API and regression tests." | [NORMAL](examples/normal.md): delegate if useful; independently review the behavior change. |
-| "The CUDA path is intermittently 30% slower. Find the cause and fix it." | [HARD](examples/hard-competition.md): consider independent hypotheses, benchmark, then implement and review. |
+| "Fix this typo in README." | [Direct](examples/simple.md): edit and checks, no review ceremony. |
+| "Add input validation to this API and regression tests." | [Lead implements](examples/normal.md), then one independent reviewer for the behavior change. |
+| "The CUDA path is intermittently 30% slower. Find the cause and fix it." | [Uncertain cause](examples/hard-competition.md): the cause is separable, so investigate independently; keep the fix with whoever found it. |
 
 ## Orca setup
 
@@ -379,8 +381,8 @@ if those routes are unavailable, same_family_fallback permits a fresh independen
 checker with the limitation recorded. Remove that fallback or require cross-family
 coverage in the task to make it mandatory. Model availability is account-specific.
 
-NORMAL/HARD guide judgment; CRITICAL deepens verification rather than maximizing
-agents. For SSH projects, installation, builds, tests and benchmarks run on the
+Risk decides how much verification a change needs, not the size of the diff or who
+wrote it. For SSH projects, installation, builds, tests and benchmarks run on the
 workspace's execution host. Paths and reports are not automatically shared across
 hosts. Use Orca's installed placement guide for remote dispatch.
 

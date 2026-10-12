@@ -1,7 +1,9 @@
 # Lead workflow
 
-Read only when coordination, independent review, competition or integration is needed.
-The short [core](../SKILL.md) remains applicable; workers do not load this guide.
+Read only when independent review or integration is needed. The short
+[core](../SKILL.md) remains applicable; workers do not load this guide. Starting any
+worker other than a reviewer is [delegation](delegation.md), which carries the test
+for whether that session earns its place.
 
 Resolve Orca from ORCA_CLI_COMMAND, otherwise orca-dev in an ORCA_DEV_REPO_ROOT
 session. On Linux outside an Orca-managed terminal use orca-ide (bare orca may be
@@ -26,26 +28,11 @@ Run builds, tests and benchmarks on the active workspace's execution host.
 Across servers, verify native access to source and reports before dispatch;
 --report-path does not transfer file contents. Missing access blocks verification.
 
-## Lead and workers
+## What needs review
 
-The [Lead](../roles/lead.md) owns decomposition, dispatch, evidence sufficiency, the
-**judge phase**, and integration. Judge is not a spawned V1 role. Delegate bounded
-implementation and fixes to an [Engineer](../roles/engineer.md) when useful; the Lead
-may make a localized change when coordination costs more than it adds. The Lead
-manages complex work and does not routinely take over delegated implementation.
-Group related execution into bounded worker tasks to limit handoff overhead.
-
-Prefer the session already holding the reproduction, measurement baseline or
-established cause when its role and launch settings fit. Otherwise hand off those
-facts and failed attempts. Context retention never overrides reviewer independence
-or the fresh sessions required for competition.
-
-Only the Lead creates workers; one generation, no grandchildren or worker-created
-Runs. Workers report further work to the Lead. A live Dispatch preamble identifies
-a worker even if its provider is normally used for Lead.
-[Architect](../roles/architect.md), [Researcher](../roles/researcher.md) and
-[Reviewer](../roles/reviewer.md) are read-only by default; fixes need an Engineer task.
-These are role instructions, not an OS sandbox.
+The [Lead](../roles/lead.md) owns the goal, the work, evidence sufficiency, the
+**judge phase**, and integration. Judge is not a spawned V1 role. The Lead builds by
+default; see [delegation](delegation.md) before handing any of that to a worker.
 
 After compaction or session resumption, follow [recover.md](../prompts/recover.md)
 before acting. The optional Codex recovery profile injects that reminder at native
@@ -53,29 +40,11 @@ SessionStart events; it never assigns a role or replaces Orca state. A worker ke
 its Dispatch even when the parent uses this profile. Model routes still come from
 policy.yaml; the profile changes neither intelligence settings nor permissions.
 
-| Level | Routing decision |
-| --- | --- |
-| SIMPLE | Tiny, obvious, low-risk change: Lead acts directly, with no worker/review ceremony. |
-| NORMAL | Delegate when useful; obtain independent review for meaningful code changes and keep coordination minimal. |
-| HARD | Use independent investigation or competing solutions where uncertainty warrants it; cross-review hypotheses when useful. |
-| CRITICAL | Name the severe risk and deepen verification; add investigation only where it addresses that risk. |
-
-These levels guide judgment, not worker counts. Behavior-changing fixes, new
-validation and concurrency, memory or performance changes need independent code
-review, even when Lead implements. Tiny or mechanical edits with no meaningful
-behavior change can end after direct checks; explain the choice briefly if unclear.
-
-Competition is a policy, not a framework. Use it for uncertain causes, meaningful
-alternatives, concurrency/memory correctness, performance questions, high blast
-radius or low confidence. Start both initial competitors in fresh Orca agent
-sessions; the Lead coordinates rather than competes. Give both the same requirements,
-base commit, raw evidence and acceptance criteria, without inherited solution
-conclusions. A lane exposed to prior solutions is not an independent comparison.
-Initial competitors see no sibling solution until both initial results
-are complete. Prefer parallel research when duplicate implementation adds no value.
-Concurrent implementations use separate **Orca** worktrees; verify the same base
-and distinct paths. Sequential work may share a checkout with exclusive ownership.
-When competition is justified, prepare the briefs with [competition.md](../prompts/competition.md).
+Behavior-changing fixes, new validation and concurrency, memory or performance
+changes need independent code review, even when the Lead implements, which is the
+ordinary case. Tiny or mechanical edits with no meaningful behavior change can end
+after direct checks; explain the choice briefly if unclear. Risk decides this, not
+the size of the diff or who wrote it.
 
 ## Explicit intelligence routing
 
@@ -90,8 +59,8 @@ A non-zero exit resolved nothing: do not launch on a guess. If the command is
 unavailable, read policy.yaml and the host policy directly, apply only known
 route keys, and disclose that.
 
-Competition uses its lane routes in place of ordinary role routes, keeping the
-assigned role explicit; review uses the **actual maker's family** lookup.
+Review uses the **actual maker's family** lookup; [competition](delegation.md#competition)
+uses its lane routes in place of ordinary role routes.
 Pass all three native options on each fresh worker-start:
 `--agent`, `--model`, `--effort`. Set the assigned role explicitly in the task spec.
 Do not pass unset values or let a configured role inherit launcher defaults.
@@ -119,9 +88,8 @@ independent checker session. Record reduced diversity in the review and decision
 An absent same_family_fallback requires opposite-family coverage.
 Explicitly required cross-family coverage still blocks approval if unavailable;
 no available independent checker blocks approval, not useful investigation.
-If competition loses a family, revise the approach and disclose the limitation;
-do not describe same-family work as cross-family competition. Do not upgrade
-ordinary engineering to a more expensive route without a policy justification.
+Do not upgrade ordinary engineering to a more expensive route without a policy
+justification.
 Lead configuration applies when starting a Lead session; changing it cannot alter
 the intelligence of an already-running session. Disclose a different existing
 Lead configuration rather than pretending the file changed it.

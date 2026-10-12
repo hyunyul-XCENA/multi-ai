@@ -16,9 +16,12 @@ Apply to ordinary engineering requests without requiring a special invocation.
 
 An active Dispatch keeps its assigned worker role and scope. Workers read only
 this core, their assigned role and Task packet; do not load lead routing policy.
-A confirmed user-facing session owns the task as Lead. Tiny or mechanical work
-needs only direct checks. For meaningful changes obtain independent review;
-when coordinating, reviewing or integrating, read [Lead workflow](references/lead-workflow.md).
+A confirmed user-facing session owns the task as Lead and does the work itself by
+default, at any size. Tiny or mechanical work needs only direct checks. For
+meaningful changes obtain independent review; when reviewing or integrating, read
+[Lead workflow](references/lead-workflow.md). Read
+[delegation](references/delegation.md) only before starting a worker other than a
+reviewer; it carries the test for whether that session earns its place.
 Before the final response, the Lead closes finished task-owned workers and removes
 disposable workspaces after preserving results; follow the workflow's cleanup checks.
 Lost role/identity after resume is not permission to become Lead or start a team.
