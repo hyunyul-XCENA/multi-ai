@@ -82,6 +82,7 @@ for (const disabled of ['claude', 'codex']) {
       assert.equal(selected.agent, enabled, target);
       assert.deepEqual(selected.disabled_providers, [disabled]);
       assert.match(selected.notes.join('\n'), /OFF by host policy/);
+      if (target.startsWith('competition-')) assert.match(selected.notes.join('\n'), /reduced diversity/);
       assert.doesNotMatch(ok(home, 'route', target, '--ladder').stdout, new RegExp(`--agent ${disabled}`));
     }
   });
@@ -102,6 +103,19 @@ test('provider filtering preserves rung provenance and never returns an earlier 
   assert.equal(unavailableFallback.status, 1);
   assert.equal(unavailableFallback.stdout, '');
   assert.match(unavailableFallback.stderr, /No enabled fallback or later route/);
+});
+
+test('competition discloses reduced diversity when a custom same-lane fallback stays enabled', () => {
+  const home = config();
+  ok(home, 'set', 'competition.lanes.alternate_family.fallback.agent', 'codex');
+  ok(home, 'set', 'competition.lanes.alternate_family.fallback.model', 'gpt-6-sol');
+  ok(home, 'provider', 'claude', 'off');
+  const selected = route(home, 'competition-alternate');
+  assert.equal(selected.agent, route(home, 'competition-primary').agent);
+  assert.equal(selected.step, 'fallback');
+  assert.equal(selected.source_group, 'competition.lanes.alternate_family');
+  assert.match(selected.notes.join('\n'), /reduced diversity/);
+  assert.match(ok(home, 'route', 'competition-alternate').stderr, /reduced diversity/);
 });
 
 test('a disabled reviewer ladder fails rather than borrowing a different role', () => {

@@ -604,7 +604,9 @@ function resolveRoute(policy, target, { makerFamily, step }) {
   if (disabled.length) notes.push(`Provider ${disabled.join(', ')} is OFF by host policy; disabled routes are excluded.`);
   if (sourceGroup !== groupPath) {
     notes.push(`No enabled routes for ${target}; using configured ${sourceGroup} routes. Record the substitution.`);
-    if (target.startsWith('competition-')) notes.push('Competition lanes now share a provider family; record the reduced diversity.');
+  }
+  if (target.startsWith('competition-') && disabled.length) {
+    notes.push('Only one provider is ON; competition lanes share its family. Record the reduced diversity.');
   }
   if (selectedStep !== step) {
     notes.push(`Requested ${step} is disabled; selected ${selectedStep}. Record the substitution.`);
