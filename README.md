@@ -135,6 +135,37 @@ first if anything is unsaved. Model choices come from the installed policy and t
 current overrides, so `set` remains the way to try an identifier that is not in use
 yet.
 
+### Pause a provider near its usage limit
+
+Turn off a provider for this host without changing any saved model preferences:
+
+```sh
+multi-ai-cli provider claude off
+multi-ai-cli provider             # codex: ON / claude: OFF
+multi-ai-cli provider claude on   # use the saved Claude routes again
+```
+
+The TUI has provider ON/OFF rows at the top; use `space` to toggle, then `s` to
+save. The provider status remains visible above the route table while filtering.
+At least one provider must stay ON. These switches live in the same host policy
+as routing overrides, survive updates, and can also be restored with
+`multi-ai-cli unset providers` or `reset`.
+
+Every `route` resolution excludes OFF providers, including fallbacks, reviewers
+and competition lanes. A disabled primary advances to the next enabled rung.
+If an ordinary role has no enabled candidates, it borrows configured Engineer
+routes, then Lead routes. A competition lane borrows its sibling's enabled
+routes, with reduced family diversity. Review uses only its configured ladder,
+including `same_family_fallback`; it fails if no enabled checker is configured.
+Explicit `--step` never returns an earlier rung. Substitutions and same-family
+review warnings go to stderr, with the selected step, source group and disabled
+providers recorded in `--json`.
+
+Changes apply to the next route resolution, including in an existing Lead session
+that follows the launch workflow. Already-running sessions keep their current
+provider. This is a manual switch; Multi-AI does not measure usage or automatically
+turn a provider back on.
+
 ### Resolve a route before dispatch
 
 The Lead resolves each launch with `route`, which merges the installed policy with
@@ -158,10 +189,10 @@ shell would rewrite, such as a bracketed `[1m]` context tag. Quoting survives a
 paste but not an unquoted `$( )`, which does not re-parse it, so read the id from
 `--json` when a route is being consumed by a script rather than a command line.
 
-`route` resolves; it never decides availability. A provider that is rate-limited or
-down only shows up when `worker-start` fails, so stepping down the ladder stays the
-Lead's call after a confirmed failure. Ask for a rung with `--step`, and see what a
-family outage leaves with `--ladder`:
+`route` honors the host's explicit provider OFF switches. It does not detect live
+rate limits or outages: those only show up when `worker-start` fails, so stepping
+past an enabled route stays the Lead's call after a confirmed failure. Ask for a
+rung with `--step`, and see the enabled candidates with `--ladder`:
 
 ```sh
 multi-ai-cli route reviewer --maker-family anthropic --ladder

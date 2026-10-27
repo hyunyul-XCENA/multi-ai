@@ -57,7 +57,10 @@ next worker. Never reuse a route resolved earlier in the session and never
 hand-assemble one from policy.yaml; a stale or retyped route is a routing error.
 A non-zero exit resolved nothing: do not launch on a guess. If the command is
 unavailable, read policy.yaml and the host policy directly, apply only known
-route keys, and disclose that.
+route keys and provider switches, and disclose that. Never launch an OFF provider.
+`multi-ai-cli provider <codex|claude> off` marks that provider unavailable without
+replacing its saved routes. Resolve each launch afresh; changing the switch does
+not stop a session that is already running.
 
 Review uses the **actual maker's family** lookup; [competition](delegation.md#competition)
 uses its lane routes in place of ordinary role routes.
@@ -79,9 +82,14 @@ native failed-attempt recovery; a timeout is not model unavailability. Neither i
 the terminal shows the agent idle at its prompt: create a new Task and hand it over with
 `orchestration dispatch --task <id> --to <handle> --inject`, keeping the failed start's
 receipt as the launch provenance. Read the screen right before injecting: a pending
-dialog (an update prompt, a credit notice) takes the injected Enter instead. `route` cannot
-know availability, so it never steps down on its own: ask for a rung with `--step`,
-and read `--ladder` to see what a family outage leaves. Record the substitution
+dialog (an update prompt, a credit notice) takes the injected Enter instead. `route`
+skips providers explicitly switched OFF, which is confirmed host unavailability;
+do not launch them to test the limit. It cannot detect live outages among enabled
+providers: ask for a rung with `--step` after a confirmed launch failure, and read
+`--ladder` for the enabled routes. When an entire ordinary role is disabled, the
+CLI borrows configured Engineer then Lead routes; a disabled competition lane
+borrows its sibling, losing cross-family diversity. Reviewer routes never borrow
+another role: they need their configured enabled checker. Record the substitution
 and any lost capability. For review, try the opposite-family primary
 and fallback; if unavailable, use the configured same_family_fallback in a fresh
 independent checker session. Record reduced diversity in the review and decision.

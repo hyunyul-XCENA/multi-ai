@@ -1,6 +1,6 @@
 {
   "name": "multi-ai-cli",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Host-local policy configuration for Multi-AI",
   "type": "module",
@@ -8,7 +8,7 @@
     "multi-ai-cli": "multi-ai-cli.mjs"
   },
   "scripts": {
-    "test": "node --test tests/context.test.mjs"
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18"

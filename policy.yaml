@@ -2,6 +2,11 @@
 version: 2
 families: {codex: openai, claude: anthropic}
 
+# Host-local availability switches; route preferences stay intact while OFF.
+providers:
+  codex: {enabled: true}
+  claude: {enabled: true}
+
 # Default identifiers live here. Host overrides may replace route leaves.
 # No [1m] tag: measured, these models already report contextWindow 1000000 without
 # it. The tag only moves models whose registry window is 200000, such as sonnet-4-6.

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { parse, stringify } from 'yaml';
 import { CONTEXT_USAGE, contextCommand } from './lib/context.mjs';
 
-const VERSION = '0.8.0';
+const VERSION = '0.9.0';
 const AGENTS = ['codex', 'claude'];
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const CODEX_RULE_MARKER = '# Managed by multi-ai-cli.';
@@ -55,7 +55,7 @@ const routeGroups = [
   },
 ];
 
-const editablePaths = new Set(['revision_rounds']);
+const editablePaths = new Set(['revision_rounds', ...AGENTS.map((agent) => `providers.${agent}.enabled`)]);
 for (const group of routeGroups) {
   for (const slot of group.slots) {
     for (const field of ['agent', 'model', 'effort']) editablePaths.add(`${group.path}.${slot}.${field}`);
@@ -104,6 +104,9 @@ function usage() {
   multi-ai-cli diff                    Show every value that differs from its default
   multi-ai-cli route <target> [opts]   Print launch flags for one worker-start
   multi-ai-cli engineer <family>       Prefer default, codex, or claude Engineer routes
+  multi-ai-cli provider                Show provider ON/OFF status
+  multi-ai-cli provider <agent> <on|off>
+                                       Pause or resume codex or claude on this host
   multi-ai-cli tui                     Configure the full policy interactively
   multi-ai-cli codex-rules install [orca-command]
                                        Allow installed Orca orchestration commands
@@ -118,6 +121,8 @@ Examples:
   multi-ai-cli unset lead.primary.effort      One value back to its default
   multi-ai-cli unset lead.primary             One whole route back to its default
   multi-ai-cli unset roles.engineer           Both Engineer routes back to their defaults
+  multi-ai-cli provider claude off            Skip Claude until it is turned on again
+  multi-ai-cli provider claude on             Restore the saved Claude routes
 
 Route targets: lead, architect, engineer, researcher, reviewer,
                competition-primary, competition-alternate
@@ -312,6 +317,10 @@ function validatePath(dottedPath) {
 
 function coerceValue(dottedPath, rawValue) {
   validatePath(dottedPath);
+  if (dottedPath.startsWith('providers.')) {
+    if (!['true', 'false'].includes(rawValue)) throw new Error('provider enabled must be true or false.');
+    return rawValue === 'true';
+  }
   if (dottedPath === 'revision_rounds') {
     if (!/^\d+$/.test(rawValue)) throw new Error('revision_rounds must be an integer from 1 to 10.');
     const value = Number(rawValue);
@@ -383,6 +392,7 @@ function sparseOverrides(base, effective) {
 }
 
 function writeOverrides(overrides) {
+  assertEnabledProvider(effectivePolicy(readBasePolicy(), overrides));
   if (fs.existsSync(configHome) && !fs.statSync(configHome).isDirectory()) {
     throw new Error(`Not a configuration directory: ${configHome}`);
   }
@@ -402,6 +412,33 @@ function load() {
   const base = readBasePolicy();
   const host = readOverrides(base);
   return { base, effective: effectivePolicy(base, host.overrides), ...host };
+}
+
+function enabledAgents(policy) {
+  return AGENTS.filter((agent) => policy.providers?.[agent]?.enabled !== false);
+}
+
+function assertEnabledProvider(policy) {
+  if (!enabledAgents(policy).length) throw new Error('Keep at least one provider ON. Enable codex or claude first.');
+}
+
+function showProviders() {
+  const { effective } = load();
+  for (const agent of AGENTS) {
+    console.log(`${agent}: ${enabledAgents(effective).includes(agent) ? 'ON' : 'OFF'}`);
+  }
+}
+
+function setProvider(agent, state) {
+  if (!AGENTS.includes(agent) || !['on', 'off'].includes(state)) {
+    throw new Error('Usage: multi-ai-cli provider <codex|claude> <on|off>');
+  }
+  const { base, effective } = load();
+  setPath(effective, `providers.${agent}.enabled`, state === 'on');
+  writeOverrides(sparseOverrides(base, effective));
+  console.log(`${agent}: ${state.toUpperCase()}. Saved route preferences are unchanged.`);
+  console.log(`Host policy: ${configPath}`);
+  console.log('Applies to the next route resolution; already-running sessions continue.');
 }
 
 function show(includeUsage = false) {
@@ -515,33 +552,71 @@ function routeGroupPath(target, makerFamily) {
   return `roles.reviewer.by_maker_family.${makerFamily}`;
 }
 
-// Resolves one rung of the ladder. Availability is not knowable here, so stepping
-// down stays the caller's decision after a confirmed launch failure.
+// Host switches are known unavailability. Runtime failures still require an
+// explicit --step; never retry an earlier rung after the caller stepped past it.
+function routeEntries(policy, target, makerFamily) {
+  assertEnabledProvider(policy);
+  const groupPath = routeGroupPath(target, makerFamily);
+  const enabled = enabledAgents(policy);
+  const entries = (sourceGroup) => ROUTE_STEPS.flatMap((step) => {
+    const route = getPath(policy, `${sourceGroup}.${step}`);
+    return route && enabled.includes(route.agent) ? [{ step, route, sourceGroup }] : [];
+  });
+  const own = entries(groupPath);
+  if (own.length || target === 'reviewer') return own;
+
+  // A lane with no enabled family borrows its sibling. Ordinary roles borrow
+  // configured Engineer routes, then Lead routes; never invent model identifiers.
+  const alternatives = target.startsWith('competition-')
+    ? [target === 'competition-primary' ? 'competition.lanes.alternate_family' : 'competition.lanes.primary_family']
+    : ['roles.engineer', 'lead'];
+  for (const alternative of alternatives) {
+    if (alternative === groupPath) continue;
+    const available = entries(alternative);
+    if (available.length) return available;
+  }
+  return [];
+}
+
 function resolveRoute(policy, target, { makerFamily, step }) {
   if (!ROUTE_STEPS.includes(step)) throw new Error(`step must be one of: ${ROUTE_STEPS.join(', ')}.`);
   if (step === 'same_family_fallback' && target !== 'reviewer') {
     throw new Error('same_family_fallback exists only for reviewer.');
   }
   const groupPath = routeGroupPath(target, makerFamily);
-  const route = getPath(policy, `${groupPath}.${step}`);
-  if (!route) {
+  if (!getPath(policy, `${groupPath}.${step}`)) {
     throw new Error(
       step === 'same_family_fallback'
         ? `Policy has no same_family_fallback for ${target}. Opposite-family coverage is required instead.`
         : `Policy has no ${step} route for ${target}.`,
     );
   }
+  const selected = routeEntries(policy, target, makerFamily)
+    .find((entry) => ROUTE_STEPS.indexOf(entry.step) >= ROUTE_STEPS.indexOf(step));
+  if (!selected) {
+    throw new Error(`No enabled ${step} or later route for ${target}. Check multi-ai-cli provider and configure an enabled route.`);
+  }
+  const { route, step: selectedStep, sourceGroup } = selected;
   const family = policy.families?.[route.agent];
   const independent = target === 'reviewer' ? family !== makerFamily : undefined;
   const notes = [];
-  if (step !== 'primary') {
+  const disabled = AGENTS.filter((agent) => !enabledAgents(policy).includes(agent));
+  if (disabled.length) notes.push(`Provider ${disabled.join(', ')} is OFF by host policy; disabled routes are excluded.`);
+  if (sourceGroup !== groupPath) {
+    notes.push(`No enabled routes for ${target}; using configured ${sourceGroup} routes. Record the substitution.`);
+    if (target.startsWith('competition-')) notes.push('Competition lanes now share a provider family; record the reduced diversity.');
+  }
+  if (selectedStep !== step) {
+    notes.push(`Requested ${step} is disabled; selected ${selectedStep}. Record the substitution.`);
+  }
+  if (selectedStep !== 'primary' && selectedStep === step) {
     notes.push('Not the primary route. Use it only after confirmed unavailability, and record the substitution.');
   }
   if (independent === false) {
     notes.push('Same family as the maker. Cross-family review independence is lost.');
     notes.push('Record the reduced diversity in the review and in the decision.');
   }
-  return { target, makerFamily, step, groupPath, route, family, independent, notes };
+  return { target, makerFamily, step: selectedStep, requestedStep: step, groupPath, sourceGroup, route, family, independent, notes };
 }
 
 function parseRouteArgs(args) {
@@ -567,12 +642,13 @@ function showRoute(args) {
   const { effective } = load();
 
   if (options.ladder) {
-    const groupPath = routeGroupPath(target, options.makerFamily);
-    for (const step of ROUTE_STEPS) {
-      if (!getPath(effective, `${groupPath}.${step}`)) continue;
-      const resolved = resolveRoute(effective, target, { ...options, step });
-      const marker = resolved.independent === false ? '   # same family as the maker' : '';
-      console.log(`${step.padEnd(22)}${routeFlags(resolved.route)}${marker}`);
+    const entries = routeEntries(effective, target, options.makerFamily);
+    if (!entries.length) throw new Error(`No enabled routes for ${target}. Check multi-ai-cli provider.`);
+    for (const { step, route, sourceGroup } of entries) {
+      const sameFamily = target === 'reviewer' && effective.families?.[route.agent] === options.makerFamily;
+      const marker = sameFamily ? '   # same family as the maker' : '';
+      const source = sourceGroup !== routeGroupPath(target, options.makerFamily) ? `   # from ${sourceGroup}` : '';
+      console.log(`${step.padEnd(22)}${routeFlags(route)}${marker}${source}`);
     }
     return;
   }
@@ -583,6 +659,9 @@ function showRoute(args) {
       target: resolved.target,
       maker_family: resolved.makerFamily ?? null,
       step: resolved.step,
+      requested_step: resolved.requestedStep,
+      source_group: resolved.sourceGroup,
+      disabled_providers: AGENTS.filter((agent) => !enabledAgents(effective).includes(agent)),
       agent: resolved.route.agent,
       model: resolved.route.model,
       effort: resolved.route.effort,
@@ -752,7 +831,9 @@ const FIELDS = ['agent', 'model', 'effort'];
 
 // Every editable line in one flat list: each route slot, then revision_rounds.
 function policyRows() {
-  const rows = [];
+  const rows = AGENTS.map((agent) => ({
+    kind: 'provider', path: `providers.${agent}.enabled`, group: agent, slot: 'provider',
+  }));
   for (const group of routeGroups) {
     for (const slot of group.slots) {
       rows.push({
@@ -768,6 +849,7 @@ function policyRows() {
 }
 
 function fieldOptions(base, effective, row, field, skipPath) {
+  if (row.kind === 'provider') return [true, false];
   if (row.kind === 'rounds') return Array.from({ length: 10 }, (_, index) => index + 1);
   if (field === 'agent') return AGENTS;
   if (field === 'effort') return EFFORTS;
@@ -784,18 +866,17 @@ function repairModel(base, effective, routePath) {
 }
 
 function rowValue(effective, row, field) {
-  return row.kind === 'rounds' ? effective.revision_rounds : getPath(effective, `${row.path}.${field}`);
+  return row.kind !== 'route' ? getPath(effective, row.path) : getPath(effective, `${row.path}.${field}`);
 }
 
 function rowAtDefault(base, effective, row) {
-  return row.kind === 'rounds'
-    ? effective.revision_rounds === base.revision_rounds
+  return row.kind !== 'route'
+    ? getPath(effective, row.path) === getPath(base, row.path)
     : routesEqual(getPath(effective, row.path), getPath(base, row.path));
 }
 
 function resetRow(base, effective, row) {
-  if (row.kind === 'rounds') effective.revision_rounds = base.revision_rounds;
-  else setPath(effective, row.path, clone(getPath(base, row.path)));
+  setPath(effective, row.path, clone(getPath(base, row.path)));
 }
 
 async function tui() {
@@ -812,6 +893,16 @@ async function tui() {
   let filter = '';
   let typing = false;
   let note = '';
+
+  const changeValue = (row, name, value) => {
+    if (row.kind === 'provider' && !value && enabledAgents(effective).length === 1) {
+      note = 'Keep at least one provider ON.';
+      return;
+    }
+    const dottedPath = row.kind === 'route' ? `${row.path}.${name}` : row.path;
+    setPath(effective, dottedPath, coerceValue(dottedPath, String(value)));
+    if (row.kind === 'route' && name === 'agent') repairModel(base, effective, row.path);
+  };
 
   const visible = () => {
     if (!filter) return rows;
@@ -837,7 +928,7 @@ async function tui() {
       return cut(`${row.group} · ${row.slot}`, labelRoom);
     };
     const changed = Object.keys(sparseOverrides(base, effective)).length;
-    const height = Math.max(8, (process.stdout.rows || 30) - 9);
+    const height = Math.max(8, (process.stdout.rows || 30) - 10);
     const top = Math.max(0, Math.min(cursor - Math.floor(height / 2), shown.length - height));
     const slice = shown.slice(Math.max(0, top), Math.max(0, top) + height);
 
@@ -845,6 +936,7 @@ async function tui() {
     const say = (line) => out.push(`${line}\n`);
 
     say(color('1', 'Multi-AI policy') + color('2', `   ${changed} override${changed === 1 ? '' : 's'}${legacy ? ' · legacy' : ''} · ${configPath}`));
+    say(`  Providers: ${AGENTS.map((agent) => `${agent} ${enabledAgents(effective).includes(agent) ? 'ON' : 'OFF'}`).join(' · ')}`);
     say('');
     say(color('2', `  ${'ROUTE'.padEnd(labelWidth)}${'AGENT'.padEnd(8)}${'MODEL'.padEnd(modelWidth)}EFFORT`));
 
@@ -852,8 +944,8 @@ async function tui() {
       const index = shown.indexOf(row);
       const here = index === cursor;
       const dirty = rowAtDefault(base, effective, row) ? ' ' : '*';
-      const cells = row.kind === 'rounds'
-        ? [{ field: 'rounds', text: String(effective.revision_rounds), width: 8 }]
+      const cells = row.kind !== 'route'
+        ? [{ text: row.kind === 'provider' ? (getPath(effective, row.path) ? 'ON' : 'OFF') : String(effective.revision_rounds), width: 8 }]
         : FIELDS.map((name, position) => ({
           field: name,
           text: String(rowValue(effective, row, name)),
@@ -862,7 +954,7 @@ async function tui() {
       let line = `${here ? color('36', '>') : ' '}${color(dirty === '*' ? '33' : '2', dirty)}${rowLabel(row).padEnd(labelWidth)}`;
       for (const [position, cell] of cells.entries()) {
         const text = cut(cell.text, cell.width);
-        const focused = here && (row.kind === 'rounds' || position === field);
+        const focused = here && (row.kind !== 'route' || position === field);
         line += focused
           ? color('7', text) + ' '.repeat(Math.max(1, cell.width - text.length))
           : text.padEnd(cell.width);
@@ -873,7 +965,7 @@ async function tui() {
     say('');
     const row = shown[cursor];
     if (row && !rowAtDefault(base, effective, row)) {
-      const original = row.kind === 'rounds' ? String(base.revision_rounds) : routeLabel(getPath(base, row.path));
+      const original = row.kind !== 'route' ? String(getPath(base, row.path)) : routeLabel(getPath(base, row.path));
       say(color('2', `  installed default: ${original}`));
     } else if (row) {
       say(color('2', '  installed default'));
@@ -951,33 +1043,26 @@ async function tui() {
       else if (key.name === 'end') cursor = shown.length - 1;
       else if (input === '/') { typing = true; filter = ''; }
       else if (row && (input === ' ' || key.name === 'space')) {
-        const name = row.kind === 'rounds' ? 'rounds' : FIELDS[field];
+        const name = row.kind !== 'route' ? row.kind : FIELDS[field];
         const options = fieldOptions(base, effective, row, name);
         const next = options[(options.indexOf(rowValue(effective, row, name)) + 1) % options.length];
-        if (row.kind === 'rounds') effective.revision_rounds = next;
-        else {
-          setPath(effective, `${row.path}.${name}`, coerceValue(`${row.path}.${name}`, String(next)));
-          if (name === 'agent') repairModel(base, effective, row.path);
-        }
+        changeValue(row, name, next);
       } else if (row && (key.name === 'return' || key.name === 'enter')) {
-        const name = row.kind === 'rounds' ? 'rounds' : FIELDS[field];
+        const name = row.kind !== 'route' ? row.kind : FIELDS[field];
         const current = rowValue(effective, row, name);
-        const fallbackDefault = row.kind === 'rounds' ? base.revision_rounds : getPath(base, `${row.path}.${name}`);
+        const fallbackDefault = getPath(base, row.kind !== 'route' ? row.path : `${row.path}.${name}`);
         const options = fieldOptions(base, effective, row, name);
         const items = name === 'model'
           ? modelChoices(base, effective, getPath(effective, `${row.path}.agent`), current, fallbackDefault)
           : options.map((value) => ({
-            name: `${value}${optionTag(value, current, fallbackDefault)}`,
+            name: `${row.kind === 'provider' ? (value ? 'ON' : 'OFF') : value}${optionTag(value, current, fallbackDefault)}`,
             value,
-            description: name === 'effort' ? EFFORT_NOTES[value] : name === 'agent' ? `Provider family: ${base.families[value]}` : '',
+            description: row.kind === 'provider' ? 'OFF excludes this provider from future route resolutions; saved routes are preserved.'
+              : name === 'effort' ? EFFORT_NOTES[value] : name === 'agent' ? `Provider family: ${base.families[value]}` : '',
           }));
         const picked = await pick(`${row.group}${row.slot ? ` · ${row.slot}` : ''} · ${name}`, items, current);
         if (picked !== BACK) {
-          if (row.kind === 'rounds') effective.revision_rounds = picked;
-          else {
-            setPath(effective, `${row.path}.${name}`, coerceValue(`${row.path}.${name}`, String(picked)));
-            if (name === 'agent') repairModel(base, effective, row.path);
-          }
+          changeValue(row, name, picked);
         }
       } else if (row && input === 'r') {
         resetRow(base, effective, row);
@@ -1038,6 +1123,8 @@ async function main() {
   if (args.length === 1 && (args[0] === '--help' || args[0] === '-h')) return console.log(usage());
   if (args.length === 1 && (args[0] === '--version' || args[0] === '-v')) return console.log(VERSION);
   if (args.length === 1 && args[0] === 'tui') return tui();
+  if (args.length === 1 && args[0] === 'provider') return showProviders();
+  if (args.length === 3 && args[0] === 'provider') return setProvider(args[1], args[2]);
   if (args.length === 2 && args[0] === 'codex-rules' && args[1] === 'install') return installCodexRules();
   if (args.length === 3 && args[0] === 'codex-rules' && args[1] === 'install') return installCodexRules(args[2]);
   if (args.length === 2 && args[0] === 'codex-rules' && args[1] === 'show') return showCodexRules();
